@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Flask / local env
+.env
+.env.*
+instance/
+
+# Logs
+logs/
+*.log
+
+# VS Code local settings
+.vscode/settings.json
+.vscode/.ropeproject/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.swp

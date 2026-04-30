@@ -1,0 +1,27 @@
+{
+  "schema": "physical_playlist_job.v1",
+  "playlist_name": "Road Trip Summer 2024",
+  "tracks": [
+    {
+      "source_path": "/music/library/Artist A/Album X/01 - Track One.flac",
+      "position": 1,
+      "display_title": "Track One",
+      "artist": "Artist A",
+      "album": "Album X"
+    },
+    {
+      "source_path": "/music/library/Artist B/Album Y/05 - Another Song.mp3",
+      "position": 2,
+      "display_title": "Another Song",
+      "artist": "Artist B",
+      "album": "Album Y"
+    },
+    {
+      "source_path": "/music/library/Artist C/Single/Deep Cut.flac",
+      "position": 3
+    }
+  ],
+  "output_format": null,
+  "normalize_loudness": false,
+  "write_tags": false
+}

@@ -1,8 +1,8 @@
 """Physical Playlist Builder CLI.
 
-This stage validates neutral playlist input and prints a dry-run operation
-plan. It does not copy, convert, normalize, tag, create playlists, or create
-output folders.
+This stage validates neutral playlist input, prints a dry-run operation plan,
+and can create a safe output folder with an export session handoff file. It
+does not copy, convert, normalize, tag, or create playlist files.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from ppb.filesystem import OutputFolderError, build_output_folder_target, create_output_folder
 from ppb.input_readers import AUTO_INPUT_TYPE, InputReadError, read_playlist_input
 from ppb.planner import ACTION_CONVERT, ACTION_COPY, ACTION_ERROR, build_dry_run_plan
 from ppb.report import write_dry_run_report
@@ -37,7 +38,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--out",
         required=True,
         metavar="DIR",
-        help="Output folder planned for exported playlist files.",
+        help="Base output folder for exported playlist files.",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        default=False,
+        help="Allow writing export_session.json into an existing non-empty output folder.",
+    )
+    parser.add_argument(
+        "--create-subfolder",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Create a timestamped playlist subfolder under --out. Default: enabled.",
     )
     parser.add_argument(
         "--dry-run",
@@ -61,7 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def print_job_summary(input_result, out_dir: Path, dry_run: bool) -> None:
+def print_job_summary(input_result, out_dir: Path, dry_run: bool, create_subfolder: bool, overwrite: bool) -> None:
     result = input_result.validation
     print("=" * 52)
     print("  Physical Playlist Builder - Job Summary")
@@ -84,7 +97,16 @@ def print_job_summary(input_result, out_dir: Path, dry_run: bool) -> None:
     print(f"  Blocked track count: {result.blocked_count}")
     print(f"  Warning count: {result.warning_count}")
     print(f"  Output folder: {out_dir}")
-    print(f"  Dry-run mode: {'YES - no files will be created' if dry_run else 'NO - validation only in this stage'}")
+    print(f"  Create subfolder: {'YES' if create_subfolder else 'NO'}")
+    print(f"  Overwrite existing non-empty output: {'YES' if overwrite else 'NO'}")
+    print(
+        "  Dry-run mode: "
+        + (
+            "YES - no files will be created"
+            if dry_run
+            else "NO - output folder and export_session.json may be created"
+        )
+    )
     print(
         "  Strict mode: "
         + (
@@ -128,6 +150,10 @@ def print_dry_run_plan(plan) -> None:
     print(
         "  Output overwrites source dir: "
         + ("YES" if plan.output_dir_overwrites_source_dir else "NO")
+    )
+    print(
+        "  Output inside source dir: "
+        + ("YES" if plan.output_dir_inside_source_dir else "NO")
     )
     print(f"  Planned copies: {copy_count}")
     print(f"  Planned conversions: {convert_count}")
@@ -201,12 +227,13 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(exc.exit_code)
 
     result = input_result.validation
-    print_job_summary(input_result, Path(args.out), args.dry_run)
 
     if result.fatal_errors:
+        print_job_summary(input_result, Path(args.out), args.dry_run, args.create_subfolder, args.overwrite)
         sys.exit(2)
 
     if not result.ok:
+        print_job_summary(input_result, Path(args.out), args.dry_run, args.create_subfolder, args.overwrite)
         print(
             f"[strict] Validation failed: {result.blocked_count} blocked track(s). "
             "Run without --strict to allow blocked tracks to be skipped later.",
@@ -214,15 +241,48 @@ def main(argv: list[str] | None = None) -> None:
         )
         sys.exit(3)
 
+    try:
+        target = build_output_folder_target(
+            args.out,
+            result.job.playlist_name,
+            create_subfolder=args.create_subfolder,
+        )
+    except OutputFolderError as exc:
+        print_job_summary(input_result, Path(args.out), args.dry_run, args.create_subfolder, args.overwrite)
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(4)
+
+    print_job_summary(
+        input_result,
+        target.final_output_dir,
+        args.dry_run,
+        args.create_subfolder,
+        args.overwrite,
+    )
+    plan = build_dry_run_plan(result.job, target.final_output_dir)
+
     if args.dry_run:
-        plan = build_dry_run_plan(result.job, Path(args.out))
         print_dry_run_plan(plan)
         if args.report:
             report_path = write_dry_run_report(plan, args.report)
             print(f"[dry-run] Report written: {report_path}")
         print("[dry-run] No files were created or modified.")
     else:
-        print("[info] Real execution is not implemented yet; validation only.")
+        try:
+            output_result = create_output_folder(
+                job=result.job,
+                plan=plan,
+                target=target,
+                overwrite=args.overwrite,
+                input_path=input_result.input_path,
+                input_type=input_result.input_type,
+            )
+        except (OSError, OutputFolderError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(4)
+        print(f"[output] Folder ready: {output_result.final_output_dir}")
+        print(f"[output] Export session written: {output_result.export_session_path}")
+        print("[output] No audio files were copied.")
 
 
 if __name__ == "__main__":

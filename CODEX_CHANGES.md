@@ -23,3 +23,12 @@
 - Updated `ppb/cli.py` so `--dry-run` prints an operation plan and `--report [FILE]` can write a `dry_run_report.json`-style report without creating music/output files.
 - Added dry-run planner and CLI report tests for copy/convert planning, missing sources, duplicate output filenames, blocked-track skips, unsafe output paths, source-directory output rejection, and report JSON generation.
 - Extended dry-run output directory validation to reject invalid filesystem characters and reserved Windows device names before any output stage can run.
+- Added `ppb/filesystem.py` with Windows-safe playlist folder-name sanitization, timestamped output subfolder target calculation, protected output-folder creation, and `export_session.json` writing without copying audio.
+- Updated `ppb/planner.py` to reject final output folders located inside source track directories.
+- Updated `ppb/report.py` with `physical_playlist_export_session.v1` JSON serialization, including `handoff.final_output_dir` for the later copy stage.
+- Updated `ppb/cli.py` with `--overwrite` and `--create-subfolder` / `--no-create-subfolder`, real output-folder creation, export-session reporting, and no-audio-copy messaging.
+- Added CLI and planner tests for timestamped output creation, exact output folders, non-empty folder protection, overwrite opt-in, sanitized playlist folder names, and source-folder nesting rejection.
+- Adjusted output-folder tests so normal success cases use a sibling folder outside the source track directory, matching the new safety rule.
+- Adjusted dry-run report summary test setup for the same sibling output/source-folder safety rule.
+- Clarified non-dry-run CLI summary text and made source-folder output safety apply to every track with a `source_path`, including blocked tracks.
+- Reviewed and updated `README.md` for the new output-folder creation stage, CLI flags, safety rules, and current limitations.

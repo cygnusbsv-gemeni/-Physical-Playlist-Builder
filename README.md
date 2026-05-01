@@ -6,7 +6,7 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: input reading, validation, normalization, and dry-run operation planning. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, and exits. It does not copy, convert, normalize, tag, create M3U8 files, or create output folders yet.
+Current stage: input reading, validation, normalization, dry-run operation planning, and safe output-folder creation. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, and can create the physical output folder plus `export_session.json`. It does not copy, convert, normalize, tag, or create M3U8 files yet.
 
 ## Supported Input Types
 
@@ -91,6 +91,8 @@ python -m ppb.cli --input tracks.txt --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input tracks.csv --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input playlist.m3u8 --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --dry-run --report
+python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut
+python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --no-create-subfolder
 ```
 
 Arguments:
@@ -99,7 +101,9 @@ Arguments:
 |---|---:|---|
 | `--input` | Yes | Path to JSON, TXT, CSV, M3U, or M3U8 input. |
 | `--input-type` | No | `auto`, `json`, `txt`, `csv`, `m3u`, or `m3u8`. Default: `auto`. |
-| `--out` | Yes | Output folder planned for future exported playlist files. |
+| `--out` | Yes | Base output folder for future exported playlist files. |
+| `--overwrite` | No | Allow writing `export_session.json` into an existing non-empty final output folder. Default: false. |
+| `--create-subfolder` / `--no-create-subfolder` | No | Create a timestamped playlist subfolder under `--out`. Default: true. |
 | `--dry-run` | No | Validate and summarize without creating or modifying files. |
 | `--strict` | No | Fail with exit code 3 when any tracks are blocked. |
 | `--report` | No | With `--dry-run`, write a JSON operation report. Passing no value writes `dry_run_report.json`. |
@@ -148,6 +152,24 @@ Then dry-run prints an operation plan with:
 
 When `--report` is passed, the same plan is written as JSON. No music files or output folders are created.
 
+## Output Folder Creation
+
+Run without `--dry-run` to create only the safe physical output folder:
+
+```bash
+python -m ppb.cli --input playlist_job.json --out ./out
+```
+
+By default the final output folder is a timestamped subfolder:
+
+```text
+<playlist_name>_<YYYYMMDD_HHMMSS>
+```
+
+The playlist name is sanitized for Windows filenames before the folder is created. Pass `--no-create-subfolder` to use `--out` as the exact final output folder.
+
+The output stage writes `export_session.json` into the final folder. This file records the final output path, the validated job, the dry-run plan, and a handoff field named `handoff.final_output_dir` for the later copy stage. No audio files are copied yet.
+
 ## Strict vs Non-Strict
 
 Blocked tracks are allowed in input and are reported.
@@ -182,9 +204,12 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 - Loudness processing, if implemented later, applies only to exported copies.
 - All outputs must stay inside the selected output folder.
 - Existing files must not be silently overwritten.
+- Existing non-empty output folders are rejected unless `--overwrite` is passed.
 - Duplicate planned output filenames are reported as conflicts.
 - Output filenames must be safe leaf filenames, not absolute paths or paths with `..`.
 - The output folder must not be the same as a source track directory.
+- The output folder must not be inside a source track directory.
+- The output path must not be empty or a filesystem root.
 - Dry-run must be available before real execution.
 
 ## Requirements
@@ -208,6 +233,5 @@ pytest tests/
 ## Current Limitations
 
 - TXT, CSV, M3U, and M3U8 inputs carry less metadata than canonical JSON.
-- Output folders are not created.
 - Files are not copied, converted, normalized, tagged, or overwritten.
 - M3U8 generation is not implemented yet.

@@ -52,6 +52,12 @@ def canonical_job(tracks=None) -> dict:
     }
 
 
+def find_export_session(root: Path) -> Path:
+    sessions = list(root.rglob("export_session.json"))
+    assert len(sessions) == 1
+    return sessions[0]
+
+
 def test_cli_prints_canonical_summary(capsys):
     workspace = make_workspace()
     try:
@@ -121,13 +127,35 @@ def test_malformed_json_exits_with_error():
         cleanup_workspace(workspace)
 
 
-def test_no_output_folder_created():
+def test_cli_creates_timestamped_output_folder_and_session_without_copying_audio():
     workspace = make_workspace()
     try:
+        source = workspace / "music" / "song.flac"
+        source.parent.mkdir()
+        source.write_text("fixture", encoding="utf-8")
         out_dir = workspace / "out"
-        job = write_job(workspace, canonical_job())
+        job = write_job(
+            workspace,
+            canonical_job(
+                [
+                    {
+                        "source_path": str(source),
+                        "position": 1,
+                        "artist": "Artist",
+                        "title": "Song",
+                    }
+                ]
+            ),
+        )
         main(["--input", str(job), "--out", str(out_dir)])
-        assert not out_dir.exists()
+        session_path = find_export_session(out_dir)
+        output_dir = session_path.parent
+        assert output_dir.name.startswith("Road Trip_")
+        assert sorted(path.name for path in output_dir.iterdir()) == ["export_session.json"]
+        data = json.loads(session_path.read_text(encoding="utf-8"))
+        assert data["output"]["final_path"] == str(output_dir)
+        assert data["handoff"]["final_output_dir"] == str(output_dir)
+        assert data["handoff"]["audio_files_copied"] is False
     finally:
         cleanup_workspace(workspace)
 
@@ -135,7 +163,8 @@ def test_no_output_folder_created():
 def test_cli_dry_run_report_writes_json_without_output_folder(capsys):
     workspace = make_workspace()
     try:
-        source = workspace / "song.flac"
+        source = workspace / "music" / "song.flac"
+        source.parent.mkdir()
         source.write_text("fixture", encoding="utf-8")
         out_dir = workspace / "out"
         report = workspace / "dry_run_report.json"
@@ -170,6 +199,75 @@ def test_cli_dry_run_report_writes_json_without_output_folder(capsys):
         data = json.loads(report.read_text(encoding="utf-8"))
         assert data["summary"]["safe_operation_count"] == 1
         assert not out_dir.exists()
+    finally:
+        cleanup_workspace(workspace)
+
+
+def test_cli_no_create_subfolder_uses_exact_output_folder():
+    workspace = make_workspace()
+    try:
+        out_dir = workspace / "exact"
+        job = write_job(workspace, canonical_job())
+        main(["--input", str(job), "--out", str(out_dir), "--no-create-subfolder"])
+        session_path = out_dir / "export_session.json"
+        assert session_path.exists()
+        data = json.loads(session_path.read_text(encoding="utf-8"))
+        assert data["output"]["create_subfolder"] is False
+        assert data["output"]["final_path"] == str(out_dir.resolve(strict=False))
+    finally:
+        cleanup_workspace(workspace)
+
+
+def test_cli_protects_existing_non_empty_output_without_overwrite():
+    workspace = make_workspace()
+    try:
+        out_dir = workspace / "exact"
+        out_dir.mkdir()
+        marker = out_dir / "keep.txt"
+        marker.write_text("keep", encoding="utf-8")
+        job = write_job(workspace, canonical_job())
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--input", str(job), "--out", str(out_dir), "--no-create-subfolder"])
+        assert exc_info.value.code == 4
+        assert marker.read_text(encoding="utf-8") == "keep"
+        assert not (out_dir / "export_session.json").exists()
+    finally:
+        cleanup_workspace(workspace)
+
+
+def test_cli_overwrite_allows_existing_non_empty_output():
+    workspace = make_workspace()
+    try:
+        out_dir = workspace / "exact"
+        out_dir.mkdir()
+        (out_dir / "keep.txt").write_text("keep", encoding="utf-8")
+        job = write_job(workspace, canonical_job())
+        main(
+            [
+                "--input",
+                str(job),
+                "--out",
+                str(out_dir),
+                "--no-create-subfolder",
+                "--overwrite",
+            ]
+        )
+        assert (out_dir / "keep.txt").exists()
+        assert (out_dir / "export_session.json").exists()
+    finally:
+        cleanup_workspace(workspace)
+
+
+def test_cli_sanitizes_playlist_name_for_created_subfolder():
+    workspace = make_workspace()
+    try:
+        raw_job = canonical_job()
+        raw_job["playlist"]["name"] = "Bad:Name?*"
+        job = write_job(workspace, raw_job)
+        out_dir = workspace / "out"
+        main(["--input", str(job), "--out", str(out_dir)])
+        session_path = find_export_session(out_dir)
+        assert session_path.parent.name.startswith("Bad_Name_")
     finally:
         cleanup_workspace(workspace)
 

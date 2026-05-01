@@ -198,10 +198,31 @@ def test_planner_rejects_output_directory_equal_to_source_directory():
         cleanup_workspace(workspace)
 
 
+def test_planner_rejects_output_directory_inside_source_directory():
+    workspace = make_workspace()
+    try:
+        source = workspace / "music" / "one.flac"
+        source.parent.mkdir()
+        source.write_text("fixture", encoding="utf-8")
+
+        plan = build_plan(
+            canonical_job([{"position": 1, "source_path": str(source)}]),
+            source.parent / "Physical Export",
+        )
+
+        assert not plan.output_dir_valid
+        assert plan.output_dir_inside_source_dir
+        assert any("inside a source track directory" in error for error in plan.errors)
+        assert plan.operations[0].planned_action == ACTION_ERROR
+    finally:
+        cleanup_workspace(workspace)
+
+
 def test_planner_rejects_dangerous_explicit_output_filename():
     workspace = make_workspace()
     try:
-        source = workspace / "one.flac"
+        source = workspace / "music" / "one.flac"
+        source.parent.mkdir()
         source.write_text("fixture", encoding="utf-8")
 
         plan = build_plan(
@@ -222,7 +243,8 @@ def test_planner_rejects_dangerous_explicit_output_filename():
 def test_planner_rejects_invalid_output_directory_path():
     workspace = make_workspace()
     try:
-        source = workspace / "one.flac"
+        source = workspace / "music" / "one.flac"
+        source.parent.mkdir()
         source.write_text("fixture", encoding="utf-8")
 
         plan = build_plan(
@@ -241,7 +263,8 @@ def test_planner_rejects_invalid_output_directory_path():
 def test_dry_run_report_dict_contains_summary():
     workspace = make_workspace()
     try:
-        source = workspace / "one.flac"
+        source = workspace / "music" / "one.flac"
+        source.parent.mkdir()
         source.write_text("fixture", encoding="utf-8")
         plan = build_plan(
             canonical_job([{"position": 1, "source_path": str(source)}]),

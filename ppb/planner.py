@@ -60,6 +60,7 @@ class DryRunPlan:
     output_dir_valid: bool
     output_dir_exists: bool
     output_dir_overwrites_source_dir: bool
+    output_dir_inside_source_dir: bool = False
     dangerous_output_paths: list[str] = field(default_factory=list)
     duplicate_output_filenames: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -114,6 +115,10 @@ def build_dry_run_plan(job: PlaylistJob, output_dir: Path | str) -> DryRunPlan:
     if output_overwrites_source:
         errors.append("Output directory must not be the same as a source track directory.")
         dangerous_output_paths.append(str(resolved_output))
+    output_inside_source = _output_inside_source_dir(resolved_output, job.tracks)
+    if output_inside_source:
+        errors.append("Output directory must not be inside a source track directory.")
+        dangerous_output_paths.append(str(resolved_output))
 
     operations: list[TrackOperation] = []
     blocked_tracks: list[TrackOperation] = []
@@ -152,6 +157,7 @@ def build_dry_run_plan(job: PlaylistJob, output_dir: Path | str) -> DryRunPlan:
         output_dir_valid=output_dir_valid,
         output_dir_exists=output_dir_exists,
         output_dir_overwrites_source_dir=output_overwrites_source,
+        output_dir_inside_source_dir=output_inside_source,
         dangerous_output_paths=sorted(set(dangerous_output_paths)),
         duplicate_output_filenames=duplicate_output_filenames,
         warnings=warnings,
@@ -339,10 +345,20 @@ def _duplicate_output_names(operations: list[TrackOperation]) -> list[TrackOpera
 
 def _output_overwrites_source_dir(output_dir: Path, tracks: list[TrackEntry]) -> bool:
     for track in tracks:
-        if track.is_blocked or not track.source_path:
+        if not track.source_path:
             continue
         source_parent = Path(track.source_path).resolve(strict=False).parent
         if output_dir == source_parent:
+            return True
+    return False
+
+
+def _output_inside_source_dir(output_dir: Path, tracks: list[TrackEntry]) -> bool:
+    for track in tracks:
+        if not track.source_path:
+            continue
+        source_parent = Path(track.source_path).resolve(strict=False).parent
+        if output_dir != source_parent and _is_relative_to(output_dir, source_parent):
             return True
     return False
 

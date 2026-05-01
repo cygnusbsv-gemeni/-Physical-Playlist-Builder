@@ -6,7 +6,7 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: input reading, validation, and normalization only. The tool reads a neutral playlist input, validates it, prints a summary, and exits. It does not copy, convert, normalize, tag, create M3U8 files, or create output folders yet.
+Current stage: input reading, validation, normalization, and dry-run operation planning. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, and exits. It does not copy, convert, normalize, tag, create M3U8 files, or create output folders yet.
 
 ## Supported Input Types
 
@@ -90,6 +90,7 @@ python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input tracks.txt --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input tracks.csv --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input playlist.m3u8 --out D:\PlaylistOut --dry-run
+python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --dry-run --report
 ```
 
 Arguments:
@@ -101,6 +102,7 @@ Arguments:
 | `--out` | Yes | Output folder planned for future exported playlist files. |
 | `--dry-run` | No | Validate and summarize without creating or modifying files. |
 | `--strict` | No | Fail with exit code 3 when any tracks are blocked. |
+| `--report` | No | With `--dry-run`, write a JSON operation report. Passing no value writes `dry_run_report.json`. |
 
 Input type detection defaults to file extension. `.json` is treated as canonical `physical_playlist_job.v1` JSON, `.txt` as a plain path list, `.csv` as tabular input, and `.m3u` / `.m3u8` as playlist files.
 
@@ -110,7 +112,7 @@ CSV input requires a `source_path` column and supports comma or semicolon delimi
 
 M3U and M3U8 input support `#EXTM3U` and `#EXTINF:<duration>,<artist> - <title>` metadata. Empty lines and unsupported comments are ignored. Relative paths are resolved against the playlist file folder.
 
-## Dry-Run Validation Workflow
+## Dry-Run Planning Workflow
 
 Use dry-run first:
 
@@ -118,7 +120,7 @@ Use dry-run first:
 python -m ppb.cli --input DOC/examples/playlist_job.v1.canonical.json --out ./out --dry-run
 ```
 
-The CLI prints:
+The CLI prints the validation summary first:
 
 ```text
 Input path: ...
@@ -133,7 +135,18 @@ Dry-run mode: ...
 Strict mode: ...
 ```
 
-At this stage, dry-run and non-dry-run both perform validation only. No files or folders are created.
+Then dry-run prints an operation plan with:
+
+- output directory validity;
+- whether the output directory already exists;
+- whether the output directory matches a source track directory;
+- planned copy and conversion counts;
+- blocked tracks;
+- missing source files;
+- duplicate output filenames;
+- operations that are safe for the next output-folder stage.
+
+When `--report` is passed, the same plan is written as JSON. No music files or output folders are created.
 
 ## Strict vs Non-Strict
 
@@ -164,10 +177,14 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 ## Safety Rules
 
 - Source audio files are never modified.
+- Dry-run checks whether source files exist before any real output stage.
 - Tags, if implemented later, are written only to exported copies.
 - Loudness processing, if implemented later, applies only to exported copies.
 - All outputs must stay inside the selected output folder.
 - Existing files must not be silently overwritten.
+- Duplicate planned output filenames are reported as conflicts.
+- Output filenames must be safe leaf filenames, not absolute paths or paths with `..`.
+- The output folder must not be the same as a source track directory.
 - Dry-run must be available before real execution.
 
 ## Requirements
@@ -190,7 +207,6 @@ pytest tests/
 
 ## Current Limitations
 
-- Source file existence is not checked yet.
 - TXT, CSV, M3U, and M3U8 inputs carry less metadata than canonical JSON.
 - Output folders are not created.
 - Files are not copied, converted, normalized, tagged, or overwritten.

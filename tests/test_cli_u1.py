@@ -132,6 +132,48 @@ def test_no_output_folder_created():
         cleanup_workspace(workspace)
 
 
+def test_cli_dry_run_report_writes_json_without_output_folder(capsys):
+    workspace = make_workspace()
+    try:
+        source = workspace / "song.flac"
+        source.write_text("fixture", encoding="utf-8")
+        out_dir = workspace / "out"
+        report = workspace / "dry_run_report.json"
+        job = write_job(
+            workspace,
+            canonical_job(
+                [
+                    {
+                        "source_path": str(source),
+                        "position": 1,
+                        "artist": "Artist",
+                        "title": "Song",
+                    }
+                ]
+            ),
+        )
+        main(
+            [
+                "--input",
+                str(job),
+                "--out",
+                str(out_dir),
+                "--dry-run",
+                "--report",
+                str(report),
+            ]
+        )
+        out = capsys.readouterr().out
+        assert "Dry-Run Operation Plan" in out
+        assert "Safe for next output-folder stage: 1" in out
+        assert report.exists()
+        data = json.loads(report.read_text(encoding="utf-8"))
+        assert data["summary"]["safe_operation_count"] == 1
+        assert not out_dir.exists()
+    finally:
+        cleanup_workspace(workspace)
+
+
 def test_cli_reads_txt_input_and_reports_normalization(capsys):
     workspace = make_workspace()
     try:

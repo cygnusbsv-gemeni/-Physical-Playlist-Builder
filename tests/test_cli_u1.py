@@ -1,75 +1,130 @@
-"""
-tests/test_cli_u1.py — Stage U1 smoke tests.
-
-Tests:
-- CLI prints summary for a valid JSON input
-- CLI exits with error for a missing input file
-- CLI exits with error for malformed JSON
-"""
-
 from __future__ import annotations
 
 import json
+import shutil
 import sys
-import pytest
+import uuid
 from pathlib import Path
 
-# Allow running tests from the project root without install
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ppb.cli import main
+from ppb.contract import SUPPORTED_FORMAT
 
 
-def write_job(tmp_path: Path, data: dict) -> Path:
-    p = tmp_path / "playlist_job.json"
-    p.write_text(json.dumps(data), encoding="utf-8")
-    return p
+RUNTIME_ROOT = Path(__file__).resolve().parent.parent / "test_runtime"
 
 
-class TestCliSummary:
-    def test_prints_summary_for_valid_json(self, tmp_path, capsys):
-        job = write_job(tmp_path, {
-            "schema": "physical_playlist_job.v1",
-            "playlist_name": "Road Trip",
-            "tracks": [
-                {"source_path": "/music/01.flac", "position": 1},
-                {"source_path": "/music/02.flac", "position": 2},
-            ],
-        })
-        main(["--input", str(job), "--out", str(tmp_path / "out")])
+def make_workspace() -> Path:
+    path = RUNTIME_ROOT / uuid.uuid4().hex
+    path.mkdir(parents=True)
+    return path
+
+
+def cleanup_workspace(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path)
+
+
+def write_job(workspace: Path, data: dict) -> Path:
+    path = workspace / "playlist_job.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+def canonical_job(tracks=None) -> dict:
+    return {
+        "format": SUPPORTED_FORMAT,
+        "playlist": {"name": "Road Trip", "track_count": len(tracks or [])},
+        "settings": {
+            "output_format": "source",
+            "copy_mode": "copy_if_compatible",
+            "normalize_loudness": False,
+            "target_lufs": -14.0,
+            "true_peak_db": -1.0,
+            "write_tags": False,
+            "generate_m3u8": True,
+            "filename_template": "{position:02d} - {artist} - {title}",
+        },
+        "tracks": tracks or [],
+    }
+
+
+def test_cli_prints_canonical_summary(capsys):
+    workspace = make_workspace()
+    try:
+        job = write_job(
+            workspace,
+            canonical_job(
+                [
+                    {"source_path": "/music/01.flac", "position": 1},
+                    {"source_path": "/music/02.flac", "position": 2},
+                ]
+            ),
+        )
+        main(["--input", str(job), "--out", str(workspace / "out"), "--dry-run"])
         out = capsys.readouterr().out
-        assert "Road Trip" in out
-        assert "2" in out  # track count
+        assert "Format: physical_playlist_job.v1" in out
+        assert "Playlist name: Road Trip" in out
+        assert "Track count: 2" in out
+        assert "Dry-run mode: YES" in out
+    finally:
+        cleanup_workspace(workspace)
 
-    def test_dry_run_flag_shown_in_summary(self, tmp_path, capsys):
-        job = write_job(tmp_path, {
-            "schema": "physical_playlist_job.v1",
-            "playlist_name": "Mix",
-            "tracks": [],
-        })
-        main(["--input", str(job), "--out", str(tmp_path / "out"), "--dry-run"])
+
+def test_cli_non_strict_reports_blocked_without_failing(capsys):
+    workspace = make_workspace()
+    try:
+        job = write_job(workspace, canonical_job([{"position": 1}]))
+        main(["--input", str(job), "--out", str(workspace / "out"), "--dry-run"])
         out = capsys.readouterr().out
-        assert "YES" in out or "dry-run" in out.lower()
+        assert "Blocked track count: 1" in out
+        assert "will be skipped later" in out
+    finally:
+        cleanup_workspace(workspace)
 
-    def test_missing_input_exits_with_error(self, tmp_path):
+
+def test_cli_strict_exits_3_on_blocked_tracks():
+    workspace = make_workspace()
+    try:
+        job = write_job(workspace, canonical_job([{"position": 1}]))
         with pytest.raises(SystemExit) as exc_info:
-            main(["--input", str(tmp_path / "nonexistent.json"), "--out", str(tmp_path / "out")])
-        assert exc_info.value.code != 0
+            main(["--input", str(job), "--out", str(workspace / "out"), "--strict"])
+        assert exc_info.value.code == 3
+    finally:
+        cleanup_workspace(workspace)
 
-    def test_malformed_json_exits_with_error(self, tmp_path):
-        bad = tmp_path / "bad.json"
+
+def test_missing_input_exits_with_error():
+    workspace = make_workspace()
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--input", str(workspace / "missing.json"), "--out", str(workspace / "out")])
+        assert exc_info.value.code != 0
+    finally:
+        cleanup_workspace(workspace)
+
+
+def test_malformed_json_exits_with_error():
+    workspace = make_workspace()
+    try:
+        bad = workspace / "bad.json"
         bad.write_text("{ not valid json }", encoding="utf-8")
         with pytest.raises(SystemExit) as exc_info:
-            main(["--input", str(bad), "--out", str(tmp_path / "out")])
-        assert exc_info.value.code != 0
+            main(["--input", str(bad), "--out", str(workspace / "out")])
+        assert exc_info.value.code == 2
+    finally:
+        cleanup_workspace(workspace)
 
-    def test_no_output_files_created(self, tmp_path, capsys):
-        """Stage U1 must not create any files in the output folder."""
-        out_dir = tmp_path / "out"
-        job = write_job(tmp_path, {
-            "schema": "physical_playlist_job.v1",
-            "playlist_name": "Empty",
-            "tracks": [],
-        })
+
+def test_no_output_folder_created():
+    workspace = make_workspace()
+    try:
+        out_dir = workspace / "out"
+        job = write_job(workspace, canonical_job())
         main(["--input", str(job), "--out", str(out_dir)])
-        assert not out_dir.exists(), "Output folder must NOT be created in Stage U1"
+        assert not out_dir.exists()
+    finally:
+        cleanup_workspace(workspace)

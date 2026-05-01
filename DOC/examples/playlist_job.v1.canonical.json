@@ -2,8 +2,8 @@
   "format": "physical_playlist_job.v1",
   "generated_at": "2026-05-01T00:00:00+00:00",
   "playlist": {
-    "name": "Road Trip Summer 2024",
-    "description": "Example neutral playlist job.",
+    "name": "Canonical Demo Playlist",
+    "description": "Neutral contract example for validation and dry-run checks.",
     "track_count": 2
   },
   "settings": {
@@ -19,33 +19,32 @@
   "tracks": [
     {
       "position": 1,
-      "source_path": "/music/library/Artist A/Album X/01 - Track One.flac",
-      "output_filename": "01 - Artist A - Track One.flac",
-      "title": "Track One",
-      "artist": "Artist A",
-      "album": "Album X",
+      "source_path": "/music/library/Artist/Album/01 - Ready Track.flac",
+      "output_filename": "01 - Artist - Ready Track.flac",
+      "title": "Ready Track",
+      "artist": "Artist",
+      "album": "Album",
       "warnings": [],
       "blockers": []
     },
     {
       "position": 2,
-      "source_path": "/music/library/Artist B/Album Y/05 - Another Song.mp3",
-      "title": "Another Song",
-      "artist": "Artist B",
-      "album": "Album Y",
-      "warnings": [
+      "source_path": "/music/library/Missing Artist/Missing Track.flac",
+      "title": "Missing Track",
+      "artist": "Missing Artist",
+      "warnings": [],
+      "blockers": [
         {
-          "code": "low_bitrate",
-          "message": "Bitrate is lower than preferred.",
+          "code": "source_unavailable",
+          "message": "Source file was unavailable when the job was generated.",
           "source": "producer"
         }
-      ],
-      "blockers": []
+      ]
     }
   ],
   "summary": {
-    "status": "warnings",
-    "can_run": true
+    "status": "blocked",
+    "can_run": false
   },
   "producer_meta": {
     "producer": "Example generator",

@@ -1,0 +1,649 @@
+{
+  "format": "physical_playlist_job.v1",
+  "generated_at": "2026-04-30T22:49:12.658183+00:00",
+  "playlist": {
+    "description": null,
+    "name": "test",
+    "track_count": 14
+  },
+  "producer_meta": {
+    "blockers": [],
+    "job_filename": "playlist_job.json",
+    "producer": "MusicLib Web",
+    "producer_format": "musiclib.export_plan.v1",
+    "producer_generated_at": "2026-04-30T22:49:12.657171+00:00",
+    "producer_stage": "prepare_only",
+    "warnings": [
+      {
+        "code": "loudness_not_measured",
+        "message": "No integrated loudness value is available yet.",
+        "severity": "note"
+      }
+    ],
+    "will_write_files": false
+  },
+  "settings": {
+    "copy_mode": "copy_if_compatible",
+    "filename_template": "{position:02d} - {artist} - {title}",
+    "generate_m3u8": true,
+    "normalize_loudness": true,
+    "output_format": "source",
+    "target_lufs": -14,
+    "true_peak_db": -1,
+    "write_tags": true
+  },
+  "summary": {
+    "blocked_count": 0,
+    "blocked_track_positions": [],
+    "blocker_count": 0,
+    "can_run": true,
+    "ready_count": 14,
+    "status": "ready",
+    "track_count": 14,
+    "warning_count": 14
+  },
+  "tracks": [
+    {
+      "album": "Bach",
+      "albumartist": "Alexandre Tharaud",
+      "artist": "Alexandre Tharaud",
+      "availability": "available",
+      "bit_depth": 24,
+      "bitrate_kbps": 4608,
+      "blockers": [],
+      "channels": 2,
+      "codec": "FLAC",
+      "date": "2024-10-18",
+      "duration_sec": 272.64,
+      "filename_hint": "01 - Alexandre Tharaud - Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).flac",
+      "genre": "Classique",
+      "output_filename": "01 - Alexandre Tharaud - Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).flac",
+      "position": 1,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 8,
+        "tag_mode": "normalize",
+        "target_ext": ".flac"
+      },
+      "sample_rate_hz": 96000,
+      "source_path": "D:\\Music\\000_Избранное наборы\\Source\\Мать\\Alexandre Tharaud - Bach (2024) [24-96]\\25. Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).flac",
+      "source_status": "active",
+      "tag_format": "VorbisComment",
+      "title": "Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846)",
+      "tracknumber": "25",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "2024"
+    },
+    {
+      "album": "Пуля",
+      "albumartist": "Ленинград",
+      "artist": "Ленинград",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "1999",
+      "duration_sec": 150.893,
+      "filename_hint": "02 - Ленинград - Таня.mp3",
+      "genre": "Rock",
+      "output_filename": "02 - Ленинград - Таня.mp3",
+      "position": 2,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 9,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\arc\\072018\\Ленинград\\Ленинград\\1999 - Пуля\\03. Таня.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.4",
+      "title": "Таня",
+      "tracknumber": "03/17",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "1999"
+    },
+    {
+      "album": "I Solisti di Zagreb - Antonio Janigro",
+      "albumartist": "Johann Sebastian Bach",
+      "artist": "Johann Sebastian Bach",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2016",
+      "duration_sec": 456.493,
+      "filename_hint": "03 - Johann Sebastian Bach - Suite for Orchestra (Overture) No.2 in B minor_ Ouverture.mp3",
+      "genre": "Classical",
+      "output_filename": "03 - Johann Sebastian Bach - Suite for Orchestra (Overture) No.2 in B minor_ Ouverture.mp3",
+      "position": 3,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 10,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\0_Best\\RCA The Golden Era of Living Stereo (2016) 60CD.mp3\\CD33. Bach - Janigro, Solisti di Zagreb\\01. Suite for Orchestra (Overture) No.2 in B minor_ Ouverture.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "Suite for Orchestra (Overture) No.2 in B minor: Ouverture",
+      "tracknumber": "1",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "2016"
+    },
+    {
+      "album": "Spark To A Flame",
+      "albumartist": "Chris de Burgh",
+      "artist": "Chris de Burgh",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "1989",
+      "duration_sec": 257.333,
+      "filename_hint": "04 - Chris de Burgh - The Lady in Red.mp3",
+      "genre": "Rock",
+      "output_filename": "04 - Chris de Burgh - The Lady in Red.mp3",
+      "position": 4,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 11,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "I:\\Music\\000_Избранное наборы\\Source\\new092019\\Best Rock Ballads\\059. Chris de Burgh - The Lady in Red.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "The Lady in Red",
+      "tracknumber": "05",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "1989"
+    },
+    {
+      "album": "Співає Тріо Маренич",
+      "albumartist": null,
+      "artist": "Тріо Маренич",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2003",
+      "duration_sec": 232.521,
+      "filename_hint": "05 - Тріо Маренич - Несе Галя воду.mp3",
+      "genre": null,
+      "output_filename": "05 - Тріо Маренич - Несе Галя воду.mp3",
+      "position": 5,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 12,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "I:\\Music\\000_Избранное наборы\\Source\\Народные\\Тріо Маренич\\2003 - Співає Тріо Маренич\\01 - Несе Галя воду.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.4",
+      "title": "Несе Галя воду",
+      "tracknumber": "01",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "2003"
+    },
+    {
+      "album": "Жива вода",
+      "albumartist": "Христина Соловій",
+      "artist": "Христина Соловій",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2015",
+      "duration_sec": 237.08,
+      "filename_hint": "06 - Христина Соловій - Несе Галя воду.mp3",
+      "genre": "Pop-Folk",
+      "output_filename": "06 - Христина Соловій - Несе Галя воду.mp3",
+      "position": 6,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 13,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "I:\\Music\\000_Избранное наборы\\Source\\Народные\\Христина Соловій\\2015 - Жива вода\\01. Несе Галя воду.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "Несе Галя воду",
+      "tracknumber": "01/12",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "2015"
+    },
+    {
+      "album": "Strange Days",
+      "albumartist": "The Doors",
+      "artist": "The Doors",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "1999",
+      "duration_sec": 132.307,
+      "filename_hint": "07 - The Doors - People Are Strange.mp3",
+      "genre": null,
+      "output_filename": "07 - The Doors - People Are Strange.mp3",
+      "position": 7,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 14,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\Роковщина\\Doors\\02 Strange Days 1967\\07 People Are Strange.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "People Are Strange",
+      "tracknumber": "7",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "1999"
+    },
+    {
+      "album": "55",
+      "albumartist": "Виктор Цой и группа Кино",
+      "artist": "Виктор Цой и группа Кино",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2017",
+      "duration_sec": 286.041,
+      "filename_hint": "08 - Виктор Цой и группа Кино - Группа крови.mp3",
+      "genre": "Rock",
+      "output_filename": "08 - Виктор Цой и группа Кино - Группа крови.mp3",
+      "position": 8,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 15,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\arc\\062018\\01\\Виктор Цой и группа Кино - 55 (3CD) (2017) MP3\\01 55 (CD1) (2017)\\15 Группа крови.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "Группа крови",
+      "tracknumber": "15/17",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "2017"
+    },
+    {
+      "album": "Звезда по имени Солнце (MF-Vol. 2)",
+      "albumartist": null,
+      "artist": "Кино",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "1995",
+      "duration_sec": 225.533,
+      "filename_hint": "09 - Кино - Звезда По Имени Солнце.mp3",
+      "genre": "Rock",
+      "output_filename": "09 - Кино - Звезда По Имени Солнце.mp3",
+      "position": 9,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 16,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\arc\\062018\\02\\Кино (Виктор Цой) - Неремастированная CD-дискография (20 CD+bonus), (1989-1995), MP3 (tracks), 320 kbps\\1989-Звезда по имени Солнце (MF (Михаил Фридман) Vol. 2 1995)\\02. Кино - Звезда По Имени Солнце.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.4",
+      "title": "Звезда По Имени Солнце",
+      "tracknumber": "2/9",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "1995"
+    },
+    {
+      "album": "Sweet Dreams (Are Made of This)",
+      "albumartist": null,
+      "artist": "Eurythmics",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "1983",
+      "duration_sec": 218.047,
+      "filename_hint": "10 - Eurythmics - Sweet Dreams (Are Made Of This.mp3",
+      "genre": "www.mp3-ogg.ru",
+      "output_filename": "10 - Eurythmics - Sweet Dreams (Are Made Of This.mp3",
+      "position": 10,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 17,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\0_Best\\Troitsky\\Best of 1983\\13. Eurythmics-sweet_dreams_are_made_of_this.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.4",
+      "title": "Sweet Dreams (Are Made Of This",
+      "tracknumber": "6",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "1983"
+    },
+    {
+      "album": "Seven Nation Army (The Glitch Mob Remix)",
+      "albumartist": null,
+      "artist": "The White Stripes",
+      "availability": "available",
+      "bit_depth": 24,
+      "bitrate_kbps": 2116,
+      "blockers": [],
+      "channels": 2,
+      "codec": "FLAC",
+      "date": "2011",
+      "duration_sec": 257.022,
+      "filename_hint": "11 - The White Stripes - Seven Nation Army (The Glitch Mob Remix).flac",
+      "genre": "Electronic",
+      "output_filename": "11 - The White Stripes - Seven Nation Army (The Glitch Mob Remix).flac",
+      "position": 11,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 18,
+        "tag_mode": "normalize",
+        "target_ext": ".flac"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "I:\\Music\\000_Избранное наборы\\Source\\Older\\The White Stripes - Seven Nation Army (The Glitch Mob Remix) [2011, 24bit.FLAC]\\The White Stripes - Seven Nation Army (The Glitch Mob Remix).flac",
+      "source_status": "active",
+      "tag_format": "VorbisComment",
+      "title": "Seven Nation Army (The Glitch Mob Remix)",
+      "tracknumber": "1",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "2011"
+    },
+    {
+      "album": "Дискотека 80-х",
+      "albumartist": null,
+      "artist": "077_Modern Talking",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 256,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2009",
+      "duration_sec": 197.198,
+      "filename_hint": "12 - 077_Modern Talking - Cheri, Cheri Lady.mp3",
+      "genre": "Диско",
+      "output_filename": "12 - 077_Modern Talking - Cheri, Cheri Lady.mp3",
+      "position": 12,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 19,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "I:\\Music\\000_Избранное наборы\\Source\\new092019\\Diskoteka 70-80\\077_Modern Talking - Cheri, Cheri Lady.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "Cheri, Cheri Lady",
+      "tracknumber": null,
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "2009"
+    },
+    {
+      "album": "Лучшие песни часть I",
+      "albumartist": null,
+      "artist": "Михаил Шуфутинский",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2008",
+      "duration_sec": 197.64,
+      "filename_hint": "13 - Михаил Шуфутинский - Марджанджа.mp3",
+      "genre": "Шансон",
+      "output_filename": "13 - Михаил Шуфутинский - Марджанджа.mp3",
+      "position": 13,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 20,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "I:\\Music\\01_NEW\\РУССО\\Шуфутинский Михаил\\Неофициальные альбомы и сборники\\2008 - Михаил Шуфутинский - Лучшие песни часть I\\02 - Михаил Шуфутинский - Марджанджа.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.4",
+      "title": "Марджанджа",
+      "tracknumber": "2/17",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "2008"
+    },
+    {
+      "album": "Дискотека 80-х",
+      "albumartist": null,
+      "artist": "061_Gloria Gainor",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 256,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2009",
+      "duration_sec": 205.009,
+      "filename_hint": "14 - 061_Gloria Gainor - I Will Survive.mp3",
+      "genre": "Диско",
+      "output_filename": "14 - 061_Gloria Gainor - I Will Survive.mp3",
+      "position": 14,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 21,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\000_Избранное наборы\\PlayList\\Izbran_092020\\061_Gloria Gainor - I Will Survive-Diskoteka 80-h.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "I Will Survive",
+      "tracknumber": null,
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note"
+        }
+      ],
+      "year": "2009"
+    }
+  ]
+}

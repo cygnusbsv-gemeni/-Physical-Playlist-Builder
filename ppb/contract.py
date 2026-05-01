@@ -1,74 +1,89 @@
-"""
-ppb/contract.py — Neutral input contract helpers.
-
-Defines the canonical in-memory representation of a playlist job
-that all input readers (JSON, TXT, CSV, M3U, folder) must produce.
-
-Stage U1: stub only — structure documented, no validation logic yet.
-Validation logic will be added in Stage U2/U3.
-"""
+"""Neutral in-memory objects for physical playlist jobs."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any
+
+
+SUPPORTED_FORMAT = "physical_playlist_job.v1"
+DEFAULT_FILENAME_TEMPLATE = "{position:02d} - {artist} - {title}"
+
+
+@dataclass
+class PlaylistSettings:
+    """Processing intentions from the canonical ``settings`` object."""
+
+    output_format: str | None = "source"
+    copy_mode: str = "copy_if_compatible"
+    normalize_loudness: bool = False
+    target_lufs: float | None = -14.0
+    true_peak_db: float | None = -1.0
+    write_tags: bool = False
+    generate_m3u8: bool = True
+    filename_template: str | None = DEFAULT_FILENAME_TEMPLATE
 
 
 @dataclass
 class TrackEntry:
-    """
-    A single track entry in a playlist job.
-
-    Attributes
-    ----------
-    source_path : str
-        Absolute or resolvable path to the source audio file.
-    position : int
-        1-based position in the playlist.
-    display_title : Optional[str]
-        Human-readable title override (optional).
-    artist : Optional[str]
-        Artist name override (optional).
-    album : Optional[str]
-        Album name override (optional).
-    """
+    """A single neutral track entry after validation and normalization."""
 
     source_path: str
     position: int
-    display_title: Optional[str] = None
-    artist: Optional[str] = None
-    album: Optional[str] = None
+
+    output_filename: str | None = None
+    filename_hint: str | None = None
+
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    albumartist: str | None = None
+    tracknumber: str | None = None
+    date: str | None = None
+    year: str | None = None
+    genre: str | None = None
+
+    duration_sec: float | None = None
+    codec: str | None = None
+    bitrate_kbps: int | None = None
+    sample_rate_hz: int | None = None
+    channels: int | None = None
+    bit_depth: int | None = None
+    tag_format: str | None = None
+    source_status: str | None = None
+    availability: str | None = None
+
+    producer_meta: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+    blockers: list[str] = field(default_factory=list)
+
+    @property
+    def is_blocked(self) -> bool:
+        return bool(self.blockers)
 
 
 @dataclass
 class PlaylistJob:
-    """
-    Canonical in-memory representation of a playlist job.
+    """Internal representation independent of any producer application."""
 
-    This is the neutral contract that all input readers must produce.
-    The rest of the pipeline (validator, planner, copier, etc.) works
-    exclusively against this dataclass — never against raw JSON or CSV.
-
-    Attributes
-    ----------
-    schema : str
-        Schema identifier, e.g. 'physical_playlist_job.v1'.
-    playlist_name : str
-        Human-readable playlist name.
-    tracks : list[TrackEntry]
-        Ordered list of track entries.
-    output_format : Optional[str]
-        Target audio format for conversion, e.g. 'mp3', 'flac'.
-        None means copy as-is.
-    normalize_loudness : bool
-        Whether to apply loudness normalization to exported copies.
-    write_tags : bool
-        Whether to write metadata tags to exported copies.
-    """
-
-    schema: str = "physical_playlist_job.v1"
+    format: str = SUPPORTED_FORMAT
     playlist_name: str = ""
+    playlist_description: str | None = None
+    playlist_track_count: int | None = None
+    settings: PlaylistSettings = field(default_factory=PlaylistSettings)
     tracks: list[TrackEntry] = field(default_factory=list)
-    output_format: Optional[str] = None
-    normalize_loudness: bool = False
-    write_tags: bool = False
+    validation_warnings: list[str] = field(default_factory=list)
+    validation_blockers: list[str] = field(default_factory=list)
+    legacy_input: bool = False
+
+    @property
+    def output_format(self) -> str | None:
+        return self.settings.output_format
+
+    @property
+    def normalize_loudness(self) -> bool:
+        return self.settings.normalize_loudness
+
+    @property
+    def write_tags(self) -> bool:
+        return self.settings.write_tags

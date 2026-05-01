@@ -1,5 +1,7 @@
 # Python
 __pycache__/
+.pytest_cache/
+.pytest_tmp/
 *.py[cod]
 *.pyo
 *.pyd
@@ -27,6 +29,8 @@ logs/
 Thumbs.db
 
 # Temporary files
+test_runtime/
+tmp_probe/
 *.tmp
 *.bak
 *.swp

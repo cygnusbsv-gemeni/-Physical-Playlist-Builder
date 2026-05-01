@@ -66,6 +66,8 @@ def test_cli_prints_canonical_summary(capsys):
         )
         main(["--input", str(job), "--out", str(workspace / "out"), "--dry-run"])
         out = capsys.readouterr().out
+        assert f"Input path: {job}" in out
+        assert "Detected input type: json" in out
         assert "Format: physical_playlist_job.v1" in out
         assert "Playlist name: Road Trip" in out
         assert "Track count: 2" in out
@@ -126,5 +128,42 @@ def test_no_output_folder_created():
         job = write_job(workspace, canonical_job())
         main(["--input", str(job), "--out", str(out_dir)])
         assert not out_dir.exists()
+    finally:
+        cleanup_workspace(workspace)
+
+
+def test_cli_reads_txt_input_and_reports_normalization(capsys):
+    workspace = make_workspace()
+    try:
+        txt = workspace / "tracks.txt"
+        txt.write_text("one.flac\n", encoding="utf-8")
+        main(["--input", str(txt), "--out", str(workspace / "out"), "--dry-run"])
+        out = capsys.readouterr().out
+        assert "Detected input type: txt" in out
+        assert "Input normalized: converted into PlaylistJob structure" in out
+        assert "Playlist name: tracks" in out
+        assert "Track count: 1" in out
+    finally:
+        cleanup_workspace(workspace)
+
+
+def test_cli_allows_explicit_input_type(capsys):
+    workspace = make_workspace()
+    try:
+        txt = workspace / "tracks.data"
+        txt.write_text("one.flac\n", encoding="utf-8")
+        main(
+            [
+                "--input",
+                str(txt),
+                "--input-type",
+                "txt",
+                "--out",
+                str(workspace / "out"),
+                "--dry-run",
+            ]
+        )
+        out = capsys.readouterr().out
+        assert "Detected input type: txt" in out
     finally:
         cleanup_workspace(workspace)

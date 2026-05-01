@@ -6,7 +6,19 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: validation and normalization only. The tool reads a neutral JSON job, validates it, prints a summary, and exits. It does not copy, convert, normalize, tag, create M3U8 files, or create output folders yet.
+Current stage: input reading, validation, and normalization only. The tool reads a neutral playlist input, validates it, prints a summary, and exits. It does not copy, convert, normalize, tag, create M3U8 files, or create output folders yet.
+
+## Supported Input Types
+
+Supported input files:
+
+- JSON `physical_playlist_job.v1`
+- TXT path list
+- CSV table
+- M3U
+- M3U8
+
+JSON `physical_playlist_job.v1` is the canonical rich input format. TXT, CSV, M3U, and M3U8 are generic convenience inputs; they are converted internally into the same normalized `PlaylistJob` structure and then validated through the same validation path.
 
 ## Canonical Input Contract
 
@@ -71,14 +83,32 @@ Any producer may generate the same JSON contract: a catalog, a TXT/CSV/M3U conve
 python -m ppb.cli --input playlist_job.json --out /path/to/output --dry-run
 ```
 
+Windows examples:
+
+```bash
+python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --dry-run
+python -m ppb.cli --input tracks.txt --out D:\PlaylistOut --dry-run
+python -m ppb.cli --input tracks.csv --out D:\PlaylistOut --dry-run
+python -m ppb.cli --input playlist.m3u8 --out D:\PlaylistOut --dry-run
+```
+
 Arguments:
 
 | Argument | Required | Description |
 |---|---:|---|
-| `--input` | Yes | Path to a JSON job using `physical_playlist_job.v1`. |
+| `--input` | Yes | Path to JSON, TXT, CSV, M3U, or M3U8 input. |
+| `--input-type` | No | `auto`, `json`, `txt`, `csv`, `m3u`, or `m3u8`. Default: `auto`. |
 | `--out` | Yes | Output folder planned for future exported playlist files. |
 | `--dry-run` | No | Validate and summarize without creating or modifying files. |
 | `--strict` | No | Fail with exit code 3 when any tracks are blocked. |
+
+Input type detection defaults to file extension. `.json` is treated as canonical `physical_playlist_job.v1` JSON, `.txt` as a plain path list, `.csv` as tabular input, and `.m3u` / `.m3u8` as playlist files.
+
+TXT input uses one source path per line. Empty lines and lines starting with `#` are ignored. Relative paths are resolved against the TXT file folder.
+
+CSV input requires a `source_path` column and supports comma or semicolon delimiters. Optional metadata columns include `position`, `output_filename`, `filename_hint`, `title`, `artist`, `album`, `albumartist`, `tracknumber`, `date`, `year`, `genre`, `duration_sec`, `codec`, `bitrate_kbps`, `sample_rate_hz`, `channels`, `bit_depth`, `tag_format`, `warnings`, and `blockers`. Relative `source_path` values are resolved against the CSV file folder.
+
+M3U and M3U8 input support `#EXTM3U` and `#EXTINF:<duration>,<artist> - <title>` metadata. Empty lines and unsupported comments are ignored. Relative paths are resolved against the playlist file folder.
 
 ## Dry-Run Validation Workflow
 
@@ -91,6 +121,8 @@ python -m ppb.cli --input DOC/examples/playlist_job.v1.canonical.json --out ./ou
 The CLI prints:
 
 ```text
+Input path: ...
+Detected input type: ...
 Format: physical_playlist_job.v1
 Playlist name: ...
 Track count: ...
@@ -127,6 +159,7 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 - `summary` is optional.
 - `producer_meta` is optional and ignored safely.
 - Unknown optional fields do not fail validation.
+- TXT, CSV, M3U, and M3U8 inputs are normalized into `PlaylistJob` before validation.
 
 ## Safety Rules
 
@@ -158,7 +191,7 @@ pytest tests/
 ## Current Limitations
 
 - Source file existence is not checked yet.
-- Only JSON input is supported.
+- TXT, CSV, M3U, and M3U8 inputs carry less metadata than canonical JSON.
 - Output folders are not created.
 - Files are not copied, converted, normalized, tagged, or overwritten.
 - M3U8 generation is not implemented yet.

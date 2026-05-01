@@ -1,29 +1,35 @@
 """Physical Playlist Builder CLI.
 
-Stage U2 validates a neutral JSON job and prints a dry-run summary. It does
-not copy, convert, normalize, tag, create playlists, or create output folders.
+This stage validates neutral playlist input and prints a dry-run summary. It
+does not copy, convert, normalize, tag, create playlists, or create output
+folders.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
-from ppb.validator import validate_job
+from ppb.input_readers import AUTO_INPUT_TYPE, InputReadError, read_playlist_input
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ppb",
-        description="Prepare a physical playlist plan from neutral JSON input.",
+        description="Prepare a physical playlist plan from neutral playlist input.",
     )
     parser.add_argument(
         "--input",
         required=True,
         metavar="FILE",
-        help="Path to playlist_job.json using physical_playlist_job.v1.",
+        help="Path to JSON, TXT, CSV, M3U, or M3U8 playlist input.",
+    )
+    parser.add_argument(
+        "--input-type",
+        choices=[AUTO_INPUT_TYPE, "json", "txt", "csv", "m3u", "m3u8"],
+        default=AUTO_INPUT_TYPE,
+        help="Input type. Default: auto-detect from file extension.",
     )
     parser.add_argument(
         "--out",
@@ -46,25 +52,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def load_json_input(path: Path) -> dict:
-    if not path.exists():
-        print(f"ERROR: Input file not found: {path}", file=sys.stderr)
-        sys.exit(1)
-    if not path.is_file():
-        print(f"ERROR: Input path is not a file: {path}", file=sys.stderr)
-        sys.exit(1)
-    try:
-        with path.open("r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except json.JSONDecodeError as exc:
-        print(f"ERROR: Could not parse JSON: {exc}", file=sys.stderr)
-        sys.exit(2)
-
-
-def print_job_summary(result, out_dir: Path, dry_run: bool) -> None:
+def print_job_summary(input_result, out_dir: Path, dry_run: bool) -> None:
+    result = input_result.validation
     print("=" * 52)
     print("  Physical Playlist Builder - Job Summary")
     print("=" * 52)
+    print(f"  Input path: {input_result.input_path}")
+    print(f"  Detected input type: {input_result.input_type}")
 
     if result.fatal_errors:
         for line in result.summary_lines():
@@ -74,6 +68,8 @@ def print_job_summary(result, out_dir: Path, dry_run: bool) -> None:
 
     job = result.job
     print(f"  Format: {job.format}")
+    if input_result.converted:
+        print("  Input normalized: converted into PlaylistJob structure")
     print(f"  Playlist name: {job.playlist_name}")
     print(f"  Track count: {len(job.tracks)}")
     print(f"  Blocked track count: {result.blocked_count}")
@@ -112,10 +108,18 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    raw = load_json_input(Path(args.input))
-    result = validate_job(raw, strict=args.strict)
+    try:
+        input_result = read_playlist_input(
+            Path(args.input),
+            input_type=args.input_type,
+            strict=args.strict,
+        )
+    except InputReadError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(exc.exit_code)
 
-    print_job_summary(result, Path(args.out), args.dry_run)
+    result = input_result.validation
+    print_job_summary(input_result, Path(args.out), args.dry_run)
 
     if result.fatal_errors:
         sys.exit(2)

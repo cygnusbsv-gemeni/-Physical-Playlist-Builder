@@ -2,8 +2,8 @@
 
 This stage validates neutral playlist input, prints a dry-run operation plan,
 creates a safe output folder, copies or converts planned source files into it,
-and then generates an M3U8 playlist from successfully exported files. It does
-not normalize or write tags.
+optionally normalizes loudness for those exported copies, and then generates an
+M3U8 playlist from the final exported files. It does not write tags.
 """
 
 from __future__ import annotations
@@ -23,8 +23,10 @@ from ppb.copier import (
     run_copy_stage,
 )
 from ppb.ffmpeg_tools import (
+    DEFAULT_LOUDNESS_RANGE_LUFS,
     STATUS_FFMPEG_UNAVAILABLE as FFMPEG_STATUS_UNAVAILABLE,
     measure_loudness_first_pass,
+    normalize_loudness_second_pass,
 )
 from ppb.filesystem import OutputFolderError, build_output_folder_target, create_output_folder
 from ppb.input_readers import AUTO_INPUT_TYPE, InputReadError, read_playlist_input
@@ -42,6 +44,7 @@ from ppb.report import (
     LOUDNESS_STATUS_FAILED,
     LOUDNESS_STATUS_FFMPEG_MISSING,
     LOUDNESS_STATUS_MEASURED,
+    LOUDNESS_STATUS_NORMALIZED,
     LOUDNESS_STATUS_SKIPPED,
     update_export_session_copy_summary,
     write_dry_run_report,
@@ -140,8 +143,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help=(
-            "Skip loudness measurement during real export. Normalization is not "
-            "implemented."
+            "Skip loudness measurement and normalization during real export."
         ),
     )
     return parser
@@ -308,8 +310,9 @@ def print_copy_summary(copy_result) -> None:
 def print_loudness_summary(loudness_summary: dict[str, Any]) -> None:
     totals = loudness_summary.get("totals", {})
     print(
-        "[output] Loudness measurement: "
+        "[output] Loudness processing: "
         f"measured={totals.get(LOUDNESS_STATUS_MEASURED, 0)} "
+        f"normalized={totals.get(LOUDNESS_STATUS_NORMALIZED, 0)} "
         f"skipped={totals.get(LOUDNESS_STATUS_SKIPPED, 0)} "
         f"failed={totals.get(LOUDNESS_STATUS_FAILED, 0)} "
         f"ffmpeg_missing={totals.get(LOUDNESS_STATUS_FFMPEG_MISSING, 0)}"
@@ -394,18 +397,21 @@ def run_loudness_measurement_stage(
     settings,
     skip_loudness: bool,
     ffmpeg_path: Path | str | None,
+    mp3_quality: int,
+    audio_bitrate: str | None,
     logger,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     output_dir = Path(final_output_dir).resolve(strict=False)
     normalize_loudness = bool(settings.normalize_loudness)
     target_lufs = settings.target_lufs
     true_peak_db = settings.true_peak_db
+    loudness_range_lufs = getattr(settings, "loudness_range_lufs", DEFAULT_LOUDNESS_RANGE_LUFS)
     eligible_count = sum(
         1
         for result in copy_result.results
         if result.status in {STATUS_COPIED, STATUS_CONVERTED}
     )
-    should_measure = normalize_loudness and not skip_loudness
+    should_process = normalize_loudness and not skip_loudness
     reason = _loudness_skip_reason(
         normalize_loudness=normalize_loudness,
         skip_loudness=skip_loudness,
@@ -415,25 +421,43 @@ def run_loudness_measurement_stage(
 
     logger.info(
         "loudness measurement started: enabled=%s eligible=%s target_lufs=%s true_peak_db=%s reason=%s",
-        should_measure,
+        should_process,
         eligible_count,
         target_lufs,
         true_peak_db,
         reason or "(none)",
     )
+    logger.info(
+        "loudness normalization started: enabled=%s eligible=%s target_lufs=%s true_peak_db=%s lra=%s reason=%s",
+        should_process,
+        eligible_count,
+        target_lufs,
+        true_peak_db,
+        loudness_range_lufs,
+        reason or "(none)",
+    )
 
     for track_result in copy_result.results:
         if track_result.status not in {STATUS_COPIED, STATUS_CONVERTED}:
-            results.append(
-                _loudness_skipped_result(
-                    "track was not successfully exported; loudness measurement was skipped."
-                )
+            skip_result = _loudness_skipped_result(
+                "track was not successfully exported; loudness processing was skipped."
+            )
+            results.append(skip_result)
+            logger.info(
+                "track %s loudness skipped: %s",
+                track_result.position,
+                skip_result["loudness_skip_reason"],
+            )
+            logger.info(
+                "track %s loudness normalization skipped: %s",
+                track_result.position,
+                skip_result["loudness_normalization_skip_reason"],
             )
             continue
 
-        if not should_measure:
+        if not should_process:
             skip_result = _loudness_skipped_result(
-                reason or "loudness measurement skipped.",
+                reason or "loudness processing skipped.",
                 measured_path=track_result.destination_path,
             )
             results.append(skip_result)
@@ -441,6 +465,11 @@ def run_loudness_measurement_stage(
                 "track %s loudness skipped: %s",
                 track_result.position,
                 skip_result["loudness_skip_reason"],
+            )
+            logger.info(
+                "track %s loudness normalization skipped: %s",
+                track_result.position,
+                skip_result["loudness_normalization_skip_reason"],
             )
             continue
 
@@ -452,10 +481,16 @@ def run_loudness_measurement_stage(
             loudness_result = _loudness_failed_result(
                 destination_error,
                 measured_path=track_result.destination_path,
+                normalization_error=destination_error,
             )
             results.append(loudness_result)
             logger.error(
                 "track %s loudness failed: %s",
+                track_result.position,
+                destination_error,
+            )
+            logger.error(
+                "track %s loudness normalization failed: %s",
                 track_result.position,
                 destination_error,
             )
@@ -467,18 +502,45 @@ def run_loudness_measurement_stage(
             ffmpeg=ffmpeg_path,
             target_lufs=target_lufs,
             true_peak_db=true_peak_db,
+            loudness_range_lufs=loudness_range_lufs,
         )
         loudness_result = _loudness_measurement_to_report(
             measurement,
             measured_path=destination_path,
         )
+        if measurement.success:
+            normalization = normalize_loudness_second_pass(
+                exported_path=destination_path,
+                output_folder=output_dir,
+                measured_input_i=measurement.input_i,
+                measured_input_tp=measurement.input_tp,
+                measured_input_lra=measurement.input_lra,
+                measured_input_thresh=measurement.input_thresh,
+                measured_target_offset=measurement.target_offset,
+                ffmpeg=measurement.ffmpeg or ffmpeg_path,
+                target_lufs=target_lufs,
+                true_peak_db=true_peak_db,
+                loudness_range_lufs=loudness_range_lufs,
+                mp3_quality=mp3_quality,
+                audio_bitrate=audio_bitrate,
+            )
+            loudness_result.update(_loudness_normalization_to_report(normalization))
+            if normalization.success and normalization.output_path:
+                final_path = Path(normalization.output_path).resolve(strict=False)
+                track_result.destination_path = str(final_path)
+                track_result.destination_size = final_path.stat().st_size if final_path.is_file() else None
+        else:
+            loudness_result.update(_normalization_not_attempted_after_measurement_failure(measurement))
         results.append(loudness_result)
         _log_loudness_track_result(logger, track_result, loudness_result)
+        _log_loudness_normalization_track_result(logger, track_result, loudness_result)
 
     totals = _count_loudness_results(results)
+    measurement_totals = _count_loudness_measurement_results(results)
+    normalization_totals = _count_loudness_normalization_results(results)
     summary = {
         "status": _loudness_stage_status(
-            should_measure=should_measure,
+            should_process=should_process,
             eligible_count=eligible_count,
             totals=totals,
         ),
@@ -487,15 +549,23 @@ def run_loudness_measurement_stage(
         "skip_loudness": skip_loudness,
         "target_lufs": target_lufs,
         "true_peak_db": true_peak_db,
+        "loudness_range_lufs": loudness_range_lufs,
         "eligible_track_count": eligible_count,
         "totals": totals,
     }
     logger.info(
         "loudness measurement completed: measured=%s skipped=%s failed=%s ffmpeg_missing=%s",
-        totals.get(LOUDNESS_STATUS_MEASURED, 0),
-        totals.get(LOUDNESS_STATUS_SKIPPED, 0),
-        totals.get(LOUDNESS_STATUS_FAILED, 0),
-        totals.get(LOUDNESS_STATUS_FFMPEG_MISSING, 0),
+        measurement_totals.get(LOUDNESS_STATUS_MEASURED, 0),
+        measurement_totals.get(LOUDNESS_STATUS_SKIPPED, 0),
+        measurement_totals.get(LOUDNESS_STATUS_FAILED, 0),
+        measurement_totals.get(LOUDNESS_STATUS_FFMPEG_MISSING, 0),
+    )
+    logger.info(
+        "loudness normalization completed: normalized=%s skipped=%s failed=%s ffmpeg_missing=%s",
+        normalization_totals.get(LOUDNESS_STATUS_NORMALIZED, 0),
+        normalization_totals.get(LOUDNESS_STATUS_SKIPPED, 0),
+        normalization_totals.get(LOUDNESS_STATUS_FAILED, 0),
+        normalization_totals.get(LOUDNESS_STATUS_FFMPEG_MISSING, 0),
     )
     return results, summary
 
@@ -511,7 +581,7 @@ def _loudness_skip_reason(
     if not normalize_loudness:
         return "settings.normalize_loudness is false."
     if eligible_count == 0:
-        return "no successfully exported files were eligible for loudness measurement."
+        return "no successfully exported files were eligible for loudness processing."
     return None
 
 
@@ -542,6 +612,12 @@ def _loudness_skipped_result(
         "loudness_stderr_summary": "",
         "loudness_skip_reason": reason,
         "loudness_measured_path": measured_path,
+        "loudness_normalization_status": LOUDNESS_STATUS_SKIPPED,
+        "normalized_output_path": None,
+        "loudness_normalization_error": None,
+        "loudness_normalization_stderr_summary": "",
+        "loudness_normalization_skip_reason": reason,
+        "loudness_normalization_return_code": None,
     }
 
 
@@ -552,11 +628,11 @@ def _loudness_failed_result(
     stderr_summary: str = "",
     ffmpeg_missing: bool = False,
     return_code: int | None = None,
+    normalization_error: str | None = None,
 ) -> dict[str, Any]:
+    status = LOUDNESS_STATUS_FFMPEG_MISSING if ffmpeg_missing else LOUDNESS_STATUS_FAILED
     return {
-        "loudness_status": (
-            LOUDNESS_STATUS_FFMPEG_MISSING if ffmpeg_missing else LOUDNESS_STATUS_FAILED
-        ),
+        "loudness_status": status,
         "input_i": None,
         "input_tp": None,
         "input_lra": None,
@@ -567,6 +643,12 @@ def _loudness_failed_result(
         "loudness_skip_reason": None,
         "loudness_measured_path": measured_path,
         "loudness_return_code": return_code,
+        "loudness_normalization_status": status,
+        "normalized_output_path": None,
+        "loudness_normalization_error": normalization_error or error,
+        "loudness_normalization_stderr_summary": stderr_summary,
+        "loudness_normalization_skip_reason": None,
+        "loudness_normalization_return_code": return_code,
     }
 
 
@@ -588,6 +670,12 @@ def _loudness_measurement_to_report(
             "loudness_skip_reason": None,
             "loudness_measured_path": measured_path,
             "loudness_return_code": measurement.return_code,
+            "loudness_normalization_status": LOUDNESS_STATUS_SKIPPED,
+            "normalized_output_path": None,
+            "loudness_normalization_error": None,
+            "loudness_normalization_stderr_summary": "",
+            "loudness_normalization_skip_reason": "loudness normalization was not evaluated.",
+            "loudness_normalization_return_code": None,
         }
 
     error = "; ".join(measurement.errors) or measurement.stderr_summary or "loudness measurement failed."
@@ -598,6 +686,59 @@ def _loudness_measurement_to_report(
         ffmpeg_missing=measurement.status == FFMPEG_STATUS_UNAVAILABLE,
         return_code=measurement.return_code,
     )
+
+
+def _loudness_normalization_to_report(normalization) -> dict[str, Any]:
+    if normalization.success:
+        return {
+            "loudness_normalization_status": LOUDNESS_STATUS_NORMALIZED,
+            "normalized_output_path": normalization.output_path,
+            "loudness_normalization_error": None,
+            "loudness_normalization_stderr_summary": "",
+            "loudness_normalization_skip_reason": None,
+            "loudness_normalization_return_code": normalization.return_code,
+        }
+
+    error = (
+        "; ".join(normalization.errors)
+        or normalization.stderr_summary
+        or "loudness normalization failed."
+    )
+    return {
+        "loudness_normalization_status": (
+            LOUDNESS_STATUS_FFMPEG_MISSING
+            if normalization.status == FFMPEG_STATUS_UNAVAILABLE
+            else LOUDNESS_STATUS_FAILED
+        ),
+        "normalized_output_path": None,
+        "loudness_normalization_error": error,
+        "loudness_normalization_stderr_summary": normalization.stderr_summary,
+        "loudness_normalization_skip_reason": None,
+        "loudness_normalization_return_code": normalization.return_code,
+    }
+
+
+def _normalization_not_attempted_after_measurement_failure(measurement) -> dict[str, Any]:
+    error = (
+        "; ".join(measurement.errors)
+        or measurement.stderr_summary
+        or "loudness measurement failed."
+    )
+    return {
+        "loudness_normalization_status": (
+            LOUDNESS_STATUS_FFMPEG_MISSING
+            if measurement.status == FFMPEG_STATUS_UNAVAILABLE
+            else LOUDNESS_STATUS_FAILED
+        ),
+        "normalized_output_path": None,
+        "loudness_normalization_error": (
+            "loudness normalization was not attempted because measurement failed: "
+            f"{error}"
+        ),
+        "loudness_normalization_stderr_summary": measurement.stderr_summary,
+        "loudness_normalization_skip_reason": None,
+        "loudness_normalization_return_code": measurement.return_code,
+    }
 
 
 def _log_loudness_track_result(logger, track_result, loudness_result: dict[str, Any]) -> None:
@@ -619,7 +760,80 @@ def _log_loudness_track_result(logger, track_result, loudness_result: dict[str, 
         logger.error("track %s loudness failed: %s", track_result.position, message)
 
 
+def _log_loudness_normalization_track_result(
+    logger,
+    track_result,
+    loudness_result: dict[str, Any],
+) -> None:
+    status = loudness_result.get("loudness_normalization_status")
+    if status == LOUDNESS_STATUS_NORMALIZED:
+        logger.info(
+            "track %s loudness normalized: %s",
+            track_result.position,
+            loudness_result.get("normalized_output_path") or track_result.destination_path,
+        )
+        return
+    if status == LOUDNESS_STATUS_SKIPPED:
+        logger.info(
+            "track %s loudness normalization skipped: %s",
+            track_result.position,
+            loudness_result.get("loudness_normalization_skip_reason")
+            or "loudness normalization skipped.",
+        )
+        return
+
+    message = (
+        loudness_result.get("loudness_normalization_error")
+        or loudness_result.get("loudness_normalization_stderr_summary")
+        or "loudness normalization failed."
+    )
+    if status == LOUDNESS_STATUS_FFMPEG_MISSING:
+        logger.error(
+            "track %s loudness normalization ffmpeg missing: %s",
+            track_result.position,
+            message,
+        )
+    elif status == LOUDNESS_STATUS_FAILED:
+        logger.error(
+            "track %s loudness normalization failed: %s",
+            track_result.position,
+            message,
+        )
+
+
 def _count_loudness_results(results: list[dict[str, Any]]) -> dict[str, int]:
+    totals = {
+        LOUDNESS_STATUS_MEASURED: 0,
+        LOUDNESS_STATUS_NORMALIZED: 0,
+        LOUDNESS_STATUS_SKIPPED: 0,
+        LOUDNESS_STATUS_FAILED: 0,
+        LOUDNESS_STATUS_FFMPEG_MISSING: 0,
+        "total": len(results),
+    }
+    for result in results:
+        measurement_status = str(result.get("loudness_status") or LOUDNESS_STATUS_SKIPPED)
+        normalization_status = str(
+            result.get("loudness_normalization_status") or LOUDNESS_STATUS_SKIPPED
+        )
+        if measurement_status == LOUDNESS_STATUS_MEASURED:
+            totals[LOUDNESS_STATUS_MEASURED] += 1
+
+        if normalization_status == LOUDNESS_STATUS_NORMALIZED:
+            totals[LOUDNESS_STATUS_NORMALIZED] += 1
+        elif normalization_status == LOUDNESS_STATUS_FFMPEG_MISSING:
+            totals[LOUDNESS_STATUS_FFMPEG_MISSING] += 1
+        elif normalization_status == LOUDNESS_STATUS_FAILED:
+            totals[LOUDNESS_STATUS_FAILED] += 1
+        elif measurement_status == LOUDNESS_STATUS_FFMPEG_MISSING:
+            totals[LOUDNESS_STATUS_FFMPEG_MISSING] += 1
+        elif measurement_status == LOUDNESS_STATUS_FAILED:
+            totals[LOUDNESS_STATUS_FAILED] += 1
+        else:
+            totals[LOUDNESS_STATUS_SKIPPED] += 1
+    return totals
+
+
+def _count_loudness_measurement_results(results: list[dict[str, Any]]) -> dict[str, int]:
     totals = {
         LOUDNESS_STATUS_MEASURED: 0,
         LOUDNESS_STATUS_SKIPPED: 0,
@@ -629,22 +843,42 @@ def _count_loudness_results(results: list[dict[str, Any]]) -> dict[str, int]:
     }
     for result in results:
         status = str(result.get("loudness_status") or LOUDNESS_STATUS_SKIPPED)
-        totals[status] = totals.get(status, 0) + 1
+        if status not in totals:
+            status = LOUDNESS_STATUS_FAILED
+        totals[status] += 1
+    return totals
+
+
+def _count_loudness_normalization_results(results: list[dict[str, Any]]) -> dict[str, int]:
+    totals = {
+        LOUDNESS_STATUS_NORMALIZED: 0,
+        LOUDNESS_STATUS_SKIPPED: 0,
+        LOUDNESS_STATUS_FAILED: 0,
+        LOUDNESS_STATUS_FFMPEG_MISSING: 0,
+        "total": len(results),
+    }
+    for result in results:
+        status = str(result.get("loudness_normalization_status") or LOUDNESS_STATUS_SKIPPED)
+        if status not in totals:
+            status = LOUDNESS_STATUS_FAILED
+        totals[status] += 1
     return totals
 
 
 def _loudness_stage_status(
     *,
-    should_measure: bool,
+    should_process: bool,
     eligible_count: int,
     totals: dict[str, int],
 ) -> str:
-    if not should_measure or eligible_count == 0:
+    if not should_process or eligible_count == 0:
         return LOUDNESS_STATUS_SKIPPED
     if totals.get(LOUDNESS_STATUS_FAILED, 0) or totals.get(LOUDNESS_STATUS_FFMPEG_MISSING, 0):
-        if totals.get(LOUDNESS_STATUS_MEASURED, 0):
+        if totals.get(LOUDNESS_STATUS_NORMALIZED, 0):
             return "completed_with_failures"
         return LOUDNESS_STATUS_FAILED
+    if totals.get(LOUDNESS_STATUS_NORMALIZED, 0):
+        return LOUDNESS_STATUS_NORMALIZED
     return LOUDNESS_STATUS_MEASURED
 
 
@@ -760,6 +994,8 @@ def main(argv: list[str] | None = None) -> None:
             settings=result.job.settings,
             skip_loudness=args.skip_loudness,
             ffmpeg_path=args.ffmpeg,
+            mp3_quality=args.mp3_quality,
+            audio_bitrate=args.audio_bitrate,
             logger=logger,
         )
         report_path = Path(output_result.final_output_dir) / EXPORT_REPORT_FILENAME

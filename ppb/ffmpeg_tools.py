@@ -1,8 +1,7 @@
-"""Small, isolated ffmpeg helpers for conversion and loudness groundwork.
+"""Small, isolated ffmpeg helpers for conversion and loudness processing.
 
-Conversion is used by the main export workflow. Loudness measurement is a
-low-level helper for future normalization stages and is intentionally not wired
-into the export workflow yet.
+Conversion, loudness measurement, and loudness normalization are used by the
+main export workflow only for files inside the selected final output folder.
 """
 
 from __future__ import annotations
@@ -24,6 +23,7 @@ STATUS_FFMPEG_UNAVAILABLE = "ffmpeg_unavailable"
 STATUS_SOURCE_MISSING = "source_missing"
 STATUS_UNSUPPORTED_FORMAT = "unsupported_format"
 STATUS_LOUDNESS_MEASURED = "measured"
+STATUS_LOUDNESS_NORMALIZED = "normalized"
 STATUS_LOUDNESS_PARSE_FAILED = "loudnorm_parse_failed"
 
 SUPPORTED_TARGET_FORMATS = {"mp3", "flac", "wav", "m4a", "aac"}
@@ -90,6 +90,33 @@ class FfmpegLoudnessMeasurementResult:
     stdout: str = ""
     stderr: str = ""
     stderr_summary: str = ""
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        """Compatibility alias for callers that use ``ok`` result fields."""
+
+        return self.success
+
+
+@dataclass(frozen=True)
+class FfmpegLoudnessNormalizationResult:
+    """Structured result for an ffmpeg loudnorm second-pass normalization."""
+
+    success: bool
+    status: str
+    source_path: str
+    output_path: str | None
+    output_folder: str
+    target_format: str
+    temporary_path: str | None = None
+    ffmpeg: FfmpegResolutionResult | None = None
+    command: list[str] = field(default_factory=list)
+    return_code: int | None = None
+    stdout: str = ""
+    stderr: str = ""
+    stderr_summary: str = ""
+    warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -557,6 +584,310 @@ def measure_loudness_first_pass(
     )
 
 
+def normalize_loudness_second_pass(
+    *,
+    exported_path: Path | str,
+    output_folder: Path | str,
+    measured_input_i: float | int | str | None,
+    measured_input_tp: float | int | str | None,
+    measured_input_lra: float | int | str | None,
+    measured_input_thresh: float | int | str | None,
+    measured_target_offset: float | int | str | None,
+    ffmpeg: FfmpegResolutionResult | Path | str | None = None,
+    target_lufs: float | int | str | None = DEFAULT_TARGET_LUFS,
+    true_peak_db: float | int | str | None = DEFAULT_TRUE_PEAK_DB,
+    loudness_range_lufs: float | int | str | None = DEFAULT_LOUDNESS_RANGE_LUFS,
+    mp3_quality: int = DEFAULT_MP3_QUALITY,
+    audio_bitrate: int | str | None = None,
+    timeout_sec: float | None = None,
+) -> FfmpegLoudnessNormalizationResult:
+    """Normalize an already exported audio file using loudnorm second pass.
+
+    The input must resolve inside ``output_folder``. The command writes to a
+    unique temporary output next to the exported file and replaces the exported
+    copy only after ffmpeg succeeds. Source audio files outside the final output
+    folder are not accepted by this helper.
+    """
+
+    output = Path(output_folder).expanduser().resolve(strict=False)
+    exported = Path(exported_path).expanduser().resolve(strict=False)
+    target_format = _normalize_target_format(exported.suffix)
+
+    target = _normalize_loudnorm_target_value(
+        target_lufs,
+        default=DEFAULT_TARGET_LUFS,
+        name="target_lufs",
+    )
+    true_peak = _normalize_loudnorm_target_value(
+        true_peak_db,
+        default=DEFAULT_TRUE_PEAK_DB,
+        name="true_peak_db",
+    )
+    lra_target = _normalize_loudnorm_target_value(
+        loudness_range_lufs,
+        default=DEFAULT_LOUDNESS_RANGE_LUFS,
+        name="loudness_range_lufs",
+    )
+    measured_values = {
+        "measured_input_i": _normalize_required_loudnorm_value(
+            measured_input_i,
+            name="measured_input_i",
+        ),
+        "measured_input_tp": _normalize_required_loudnorm_value(
+            measured_input_tp,
+            name="measured_input_tp",
+        ),
+        "measured_input_lra": _normalize_required_loudnorm_value(
+            measured_input_lra,
+            name="measured_input_lra",
+        ),
+        "measured_input_thresh": _normalize_required_loudnorm_value(
+            measured_input_thresh,
+            name="measured_input_thresh",
+        ),
+        "measured_target_offset": _normalize_required_loudnorm_value(
+            measured_target_offset,
+            name="measured_target_offset",
+        ),
+    }
+
+    errors = [
+        result.error
+        for result in (target, true_peak, lra_target, *measured_values.values())
+        if result.error is not None
+    ]
+    errors.extend(
+        _validate_loudness_normalization_request(
+            exported=exported,
+            output=output,
+            target_format=target_format,
+            mp3_quality=mp3_quality,
+            audio_bitrate=audio_bitrate,
+        )
+    )
+    if errors:
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(exported),
+            output_path=str(exported),
+            output_folder=str(output),
+            target_format=target_format,
+            errors=errors,
+        )
+
+    resolution = _ensure_ffmpeg_resolution(ffmpeg)
+    if not resolution.ok:
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FFMPEG_UNAVAILABLE,
+            source_path=str(exported),
+            output_path=str(exported),
+            output_folder=str(output),
+            target_format=target_format,
+            ffmpeg=resolution,
+            errors=[resolution.error or "ffmpeg executable could not be resolved."],
+        )
+
+    bitrate = _normalize_audio_bitrate(audio_bitrate)
+    if bitrate.error:
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(exported),
+            output_path=str(exported),
+            output_folder=str(output),
+            target_format=target_format,
+            ffmpeg=resolution,
+            errors=[bitrate.error],
+        )
+
+    temp_result = _unique_loudness_temp_path(exported=exported, output=output)
+    if temp_result.error is not None or temp_result.path is None:
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(exported),
+            output_path=str(exported),
+            output_folder=str(output),
+            target_format=target_format,
+            ffmpeg=resolution,
+            errors=[temp_result.error or "Could not create a safe temporary loudness output path."],
+        )
+
+    temporary = temp_result.path
+    command = _build_loudness_normalization_command(
+        executable=resolution.executable or "ffmpeg",
+        source=exported,
+        destination=temporary,
+        target_format=target_format,
+        target_lufs=target.value,
+        true_peak_db=true_peak.value,
+        loudness_range_lufs=lra_target.value,
+        measured_input_i=measured_values["measured_input_i"].value,
+        measured_input_tp=measured_values["measured_input_tp"].value,
+        measured_input_lra=measured_values["measured_input_lra"].value,
+        measured_input_thresh=measured_values["measured_input_thresh"].value,
+        measured_target_offset=measured_values["measured_target_offset"].value,
+        mp3_quality=mp3_quality,
+        audio_bitrate=bitrate.value,
+    )
+
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_sec,
+        )
+    except OSError as exc:
+        warnings = _remove_partial_destination(
+            temporary,
+            destination_existed_before=False,
+        )
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(exported),
+            output_path=str(exported),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            warnings=warnings,
+            errors=[f"ffmpeg loudness normalization failed: {exc}"],
+        )
+    except subprocess.TimeoutExpired as exc:
+        stderr = exc.stderr or ""
+        warnings = _remove_partial_destination(
+            temporary,
+            destination_existed_before=False,
+        )
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(exported),
+            output_path=str(exported),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            stdout=exc.stdout or "",
+            stderr=stderr,
+            stderr_summary=_summarize_stderr(stderr),
+            warnings=warnings,
+            errors=[f"ffmpeg loudness normalization timed out after {timeout_sec:g} seconds."],
+        )
+
+    stdout = completed.stdout or ""
+    stderr = completed.stderr or ""
+    stderr_summary = _summarize_stderr(stderr)
+    if completed.returncode != 0:
+        warnings = _remove_partial_destination(
+            temporary,
+            destination_existed_before=False,
+        )
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(exported),
+            output_path=str(exported),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            warnings=warnings,
+            errors=[f"ffmpeg loudness normalization failed with exit code {completed.returncode}."],
+        )
+
+    if not temporary.is_file():
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(exported),
+            output_path=str(exported),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            errors=["ffmpeg reported success but temporary normalized file was not created."],
+        )
+
+    try:
+        temporary.replace(exported)
+    except OSError as exc:
+        warnings = _remove_partial_destination(
+            temporary,
+            destination_existed_before=False,
+        )
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(exported),
+            output_path=str(exported),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            warnings=warnings,
+            errors=[f"Could not replace exported file after loudness normalization: {exc}"],
+        )
+
+    if not exported.is_file():
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(exported),
+            output_path=str(exported),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            errors=["Normalized replacement completed but exported file is missing."],
+        )
+
+    return FfmpegLoudnessNormalizationResult(
+        success=True,
+        status=STATUS_LOUDNESS_NORMALIZED,
+        source_path=str(exported),
+        output_path=str(exported),
+        output_folder=str(output),
+        target_format=target_format,
+        temporary_path=str(temporary),
+        ffmpeg=resolution,
+        command=command,
+        return_code=completed.returncode,
+        stdout=stdout,
+        stderr=stderr,
+        stderr_summary=stderr_summary,
+    )
+
+
 @dataclass(frozen=True)
 class _CandidateResult:
     executable: str
@@ -572,6 +903,12 @@ class _BitrateResult:
 @dataclass(frozen=True)
 class _FloatResult:
     value: float
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class _TempPathResult:
+    path: Path | None
     error: str | None = None
 
 
@@ -680,6 +1017,35 @@ def _validate_conversion_request(
     return errors
 
 
+def _validate_loudness_normalization_request(
+    *,
+    exported: Path,
+    output: Path,
+    target_format: str,
+    mp3_quality: int,
+    audio_bitrate: int | str | None,
+) -> list[str]:
+    errors: list[str] = []
+
+    if not _is_relative_to(exported, output) or exported == output:
+        errors.append(f"Refused loudness normalization outside final output folder: {exported}")
+    if not exported.is_file():
+        errors.append(f"Exported file does not exist on disk: {exported}")
+    if target_format not in SUPPORTED_TARGET_FORMATS:
+        errors.append(
+            "Unsupported normalization target format: "
+            f"{target_format or '(empty)'}. Supported formats: "
+            f"{', '.join(sorted(SUPPORTED_TARGET_FORMATS))}."
+        )
+    if not 0 <= mp3_quality <= 9:
+        errors.append("mp3_quality must be an integer from 0 to 9.")
+    bitrate = _normalize_audio_bitrate(audio_bitrate)
+    if bitrate.error:
+        errors.append(bitrate.error)
+
+    return errors
+
+
 def _build_loudness_measurement_command(
     *,
     executable: str,
@@ -711,6 +1077,57 @@ def _build_loudness_measurement_command(
         "null",
         "-",
     ]
+
+
+def _build_loudness_normalization_command(
+    *,
+    executable: str,
+    source: Path,
+    destination: Path,
+    target_format: str,
+    target_lufs: float,
+    true_peak_db: float,
+    loudness_range_lufs: float,
+    measured_input_i: float,
+    measured_input_tp: float,
+    measured_input_lra: float,
+    measured_input_thresh: float,
+    measured_target_offset: float,
+    mp3_quality: int,
+    audio_bitrate: str | None,
+) -> list[str]:
+    loudnorm_filter = (
+        "loudnorm="
+        f"I={_format_ffmpeg_number(target_lufs)}:"
+        f"TP={_format_ffmpeg_number(true_peak_db)}:"
+        f"LRA={_format_ffmpeg_number(loudness_range_lufs)}:"
+        f"measured_I={_format_ffmpeg_number(measured_input_i)}:"
+        f"measured_TP={_format_ffmpeg_number(measured_input_tp)}:"
+        f"measured_LRA={_format_ffmpeg_number(measured_input_lra)}:"
+        f"measured_thresh={_format_ffmpeg_number(measured_input_thresh)}:"
+        f"offset={_format_ffmpeg_number(measured_target_offset)}:"
+        "linear=true:"
+        "print_format=summary"
+    )
+    command = [
+        executable,
+        "-hide_banner",
+        "-nostdin",
+        "-nostats",
+        "-n",
+        "-i",
+        str(source),
+        "-map",
+        "0:a:0",
+        "-vn",
+        "-map_metadata",
+        "-1",
+        "-af",
+        loudnorm_filter,
+    ]
+    command.extend(_codec_args(target_format, mp3_quality=mp3_quality, audio_bitrate=audio_bitrate))
+    command.extend(["-f", _muxer_for_format(target_format), str(destination)])
+    return command
 
 
 def _build_ffmpeg_command(
@@ -820,6 +1237,22 @@ def _normalize_loudnorm_target_value(
     return _FloatResult(value=normalized)
 
 
+def _normalize_required_loudnorm_value(
+    value: float | int | str | None,
+    *,
+    name: str,
+) -> _FloatResult:
+    if value is None:
+        return _FloatResult(value=0.0, error=f"{name} is required for loudness normalization.")
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        return _FloatResult(value=0.0, error=f"{name} must be a finite number.")
+    if not math.isfinite(normalized):
+        return _FloatResult(value=0.0, error=f"{name} must be a finite number.")
+    return _FloatResult(value=normalized)
+
+
 def _format_ffmpeg_number(value: float) -> str:
     return f"{value:g}"
 
@@ -908,6 +1341,30 @@ def _remove_partial_destination(destination: Path, *, destination_existed_before
     except OSError as exc:
         return [f"Could not remove partial failed conversion output: {exc}"]
     return []
+
+
+def _unique_loudness_temp_path(*, exported: Path, output: Path) -> _TempPathResult:
+    parent = exported.parent.resolve(strict=False)
+    if not _is_relative_to(parent, output):
+        return _TempPathResult(
+            path=None,
+            error=f"Temporary loudness output parent escapes final output folder: {parent}",
+        )
+
+    suffix = exported.suffix or ".tmp"
+    pid = os.getpid()
+    for index in range(1, 1000):
+        candidate = parent / f".{exported.stem}.ppb-loudnorm-{pid}-{index}.tmp{suffix}"
+        candidate = candidate.resolve(strict=False)
+        if candidate == exported or not _is_relative_to(candidate, output):
+            continue
+        if not candidate.exists():
+            return _TempPathResult(path=candidate)
+
+    return _TempPathResult(
+        path=None,
+        error=f"Could not find a non-existing temporary loudness output path near: {exported}",
+    )
 
 
 def _first_nonempty_line(value: str) -> str | None:

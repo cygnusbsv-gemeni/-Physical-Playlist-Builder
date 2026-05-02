@@ -26,11 +26,18 @@ from ppb.planner import DryRunPlan
 EXPORT_REPORT_TEXT_FILENAME = "export_report.txt"
 
 LOUDNESS_STATUS_MEASURED = "measured"
+LOUDNESS_STATUS_NORMALIZED = "normalized"
 LOUDNESS_STATUS_SKIPPED = "skipped"
 LOUDNESS_STATUS_FAILED = "failed"
 LOUDNESS_STATUS_FFMPEG_MISSING = "ffmpeg_missing"
 LOUDNESS_STATUSES = {
     LOUDNESS_STATUS_MEASURED,
+    LOUDNESS_STATUS_SKIPPED,
+    LOUDNESS_STATUS_FAILED,
+    LOUDNESS_STATUS_FFMPEG_MISSING,
+}
+LOUDNESS_NORMALIZATION_STATUSES = {
+    LOUDNESS_STATUS_NORMALIZED,
     LOUDNESS_STATUS_SKIPPED,
     LOUDNESS_STATUS_FAILED,
     LOUDNESS_STATUS_FFMPEG_MISSING,
@@ -44,6 +51,12 @@ LOUDNESS_FIELD_DEFAULTS: dict[str, Any] = {
     "target_offset": None,
     "loudness_error": None,
     "loudness_stderr_summary": "",
+    "loudness_normalization_status": LOUDNESS_STATUS_SKIPPED,
+    "normalized_output_path": None,
+    "loudness_normalization_error": None,
+    "loudness_normalization_stderr_summary": "",
+    "loudness_normalization_skip_reason": None,
+    "loudness_normalization_return_code": None,
 }
 
 
@@ -296,13 +309,15 @@ def write_export_report_text(
         f"Destination exists: {summary.get('destination_exists', 0)}",
         f"FFmpeg missing: {summary.get('ffmpeg_missing', 0)}",
         "",
-        "Loudness Measurement",
+        "Loudness Measurement And Normalization",
         "-" * 40,
         f"Status: {loudness_metadata.get('status', 'skipped')}",
         f"Reason: {loudness_metadata.get('reason') or '(none)'}",
         f"Target LUFS: {_format_optional_value(loudness_metadata.get('target_lufs'))}",
         f"True peak dB: {_format_optional_value(loudness_metadata.get('true_peak_db'))}",
+        f"Loudness range LUFS: {_format_optional_value(loudness_metadata.get('loudness_range_lufs'))}",
         f"Measured: {loudness_totals.get(LOUDNESS_STATUS_MEASURED, 0)}",
+        f"Normalized: {loudness_totals.get(LOUDNESS_STATUS_NORMALIZED, 0)}",
         f"Skipped: {loudness_totals.get(LOUDNESS_STATUS_SKIPPED, 0)}",
         f"Failed: {loudness_totals.get(LOUDNESS_STATUS_FAILED, 0)}",
         f"FFmpeg missing: {loudness_totals.get(LOUDNESS_STATUS_FFMPEG_MISSING, 0)}",
@@ -440,20 +455,48 @@ def _loudness_result_with_defaults(data: dict[str, Any]) -> dict[str, Any]:
         status = LOUDNESS_STATUS_FAILED
         result["loudness_error"] = "Unknown loudness status in report data."
     result["loudness_status"] = status
+
+    normalization_status = str(
+        result.get("loudness_normalization_status") or LOUDNESS_STATUS_SKIPPED
+    )
+    if normalization_status not in LOUDNESS_NORMALIZATION_STATUSES:
+        normalization_status = LOUDNESS_STATUS_FAILED
+        result["loudness_normalization_error"] = (
+            "Unknown loudness normalization status in report data."
+        )
+    result["loudness_normalization_status"] = normalization_status
     return result
 
 
 def _count_loudness_statuses(loudness_results: list[dict[str, Any]]) -> dict[str, int]:
     totals = {
         LOUDNESS_STATUS_MEASURED: 0,
+        LOUDNESS_STATUS_NORMALIZED: 0,
         LOUDNESS_STATUS_SKIPPED: 0,
         LOUDNESS_STATUS_FAILED: 0,
         LOUDNESS_STATUS_FFMPEG_MISSING: 0,
         "total": len(loudness_results),
     }
     for result in loudness_results:
-        status = str(result.get("loudness_status") or LOUDNESS_STATUS_SKIPPED)
-        totals[status] = totals.get(status, 0) + 1
+        measurement_status = str(result.get("loudness_status") or LOUDNESS_STATUS_SKIPPED)
+        normalization_status = str(
+            result.get("loudness_normalization_status") or LOUDNESS_STATUS_SKIPPED
+        )
+        if measurement_status == LOUDNESS_STATUS_MEASURED:
+            totals[LOUDNESS_STATUS_MEASURED] += 1
+
+        if normalization_status == LOUDNESS_STATUS_NORMALIZED:
+            totals[LOUDNESS_STATUS_NORMALIZED] += 1
+        elif normalization_status == LOUDNESS_STATUS_FFMPEG_MISSING:
+            totals[LOUDNESS_STATUS_FFMPEG_MISSING] += 1
+        elif normalization_status == LOUDNESS_STATUS_FAILED:
+            totals[LOUDNESS_STATUS_FAILED] += 1
+        elif measurement_status == LOUDNESS_STATUS_FFMPEG_MISSING:
+            totals[LOUDNESS_STATUS_FFMPEG_MISSING] += 1
+        elif measurement_status == LOUDNESS_STATUS_FAILED:
+            totals[LOUDNESS_STATUS_FAILED] += 1
+        else:
+            totals[LOUDNESS_STATUS_SKIPPED] += 1
     return totals
 
 
@@ -469,6 +512,7 @@ def _loudness_summary_to_dict(
         "skip_loudness": None,
         "target_lufs": None,
         "true_peak_db": None,
+        "loudness_range_lufs": None,
         "totals": loudness_totals,
     }
     if loudness_summary is not None:
@@ -493,12 +537,24 @@ def _collect_loudness_errors(
     errors: list[str] = []
     for result, loudness in zip(copy_result.results, loudness_results):
         status = loudness.get("loudness_status")
-        if status not in {LOUDNESS_STATUS_FAILED, LOUDNESS_STATUS_FFMPEG_MISSING}:
+        if status in {LOUDNESS_STATUS_FAILED, LOUDNESS_STATUS_FFMPEG_MISSING}:
+            detail = loudness.get("loudness_error") or loudness.get("loudness_stderr_summary")
+            if not detail:
+                detail = "loudness measurement failed without details."
+            errors.append(f"track {result.position} loudness measurement {status}: {detail}")
+
+        normalization_status = loudness.get("loudness_normalization_status")
+        if normalization_status not in {LOUDNESS_STATUS_FAILED, LOUDNESS_STATUS_FFMPEG_MISSING}:
             continue
-        detail = loudness.get("loudness_error") or loudness.get("loudness_stderr_summary")
+        detail = (
+            loudness.get("loudness_normalization_error")
+            or loudness.get("loudness_normalization_stderr_summary")
+        )
         if not detail:
-            detail = "loudness measurement failed without details."
-        errors.append(f"track {result.position} loudness {status}: {detail}")
+            detail = "loudness normalization failed without details."
+        errors.append(
+            f"track {result.position} loudness normalization {normalization_status}: {detail}"
+        )
     return errors
 
 
@@ -546,25 +602,38 @@ def _append_loudness_failure_section(
     matching = [
         (result, loudness)
         for result, loudness in zip(results, loudness_results)
-        if loudness.get("loudness_status")
-        in {LOUDNESS_STATUS_FAILED, LOUDNESS_STATUS_FFMPEG_MISSING}
+        if (
+            loudness.get("loudness_status")
+            in {LOUDNESS_STATUS_FAILED, LOUDNESS_STATUS_FFMPEG_MISSING}
+            or loudness.get("loudness_normalization_status")
+            in {LOUDNESS_STATUS_FAILED, LOUDNESS_STATUS_FFMPEG_MISSING}
+        )
     ]
     if not matching:
         lines.extend(["None", ""])
         return
     for result, loudness in matching:
         lines.append(
-            f"track {result.position}: {loudness.get('loudness_status')} | "
+            f"track {result.position}: measurement={loudness.get('loudness_status')} | "
+            f"normalization={loudness.get('loudness_normalization_status')} | "
             f"{result.expected_output_filename or '(no output filename)'} | "
             f"destination={result.destination_path or '(no destination)'}"
         )
         error = loudness.get("loudness_error")
         if error:
-            lines.append(f"  error: {error}")
+            lines.append(f"  measurement error: {error}")
         stderr_summary = loudness.get("loudness_stderr_summary")
         if stderr_summary:
-            lines.append("  loudness stderr summary:")
+            lines.append("  measurement stderr summary:")
             for line in str(stderr_summary).splitlines():
+                lines.append(f"    {line}")
+        normalization_error = loudness.get("loudness_normalization_error")
+        if normalization_error:
+            lines.append(f"  normalization error: {normalization_error}")
+        normalization_stderr = loudness.get("loudness_normalization_stderr_summary")
+        if normalization_stderr:
+            lines.append("  normalization stderr summary:")
+            for line in str(normalization_stderr).splitlines():
                 lines.append(f"    {line}")
     lines.append("")
 

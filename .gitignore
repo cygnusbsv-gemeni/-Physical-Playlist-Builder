@@ -34,3 +34,6 @@ tmp_probe/
 *.tmp
 *.bak
 *.swp
+
+# Out
+out/

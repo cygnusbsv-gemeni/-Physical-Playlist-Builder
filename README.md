@@ -6,7 +6,7 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: input reading, validation, normalization, dry-run operation planning, safe output-folder creation, copying source-compatible tracks into the export folder, and generating `playlist.m3u8` from successfully copied files only. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, generates a UTF-8 `playlist.m3u8`, and writes `export_report.json` with both copy and M3U8 metadata. It does not convert, normalize, or write tags.
+Current stage: input reading, validation, normalization, dry-run operation planning, safe output-folder creation, copying source-compatible tracks into the export folder, generating `playlist.m3u8` from successfully copied files only, and writing user-facing reports/logs. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. It does not convert, normalize, or write tags.
 
 ## Supported Input Types
 
@@ -155,7 +155,7 @@ Then dry-run prints an operation plan with:
 
 When `--report` is passed, the same plan is written as JSON. No music files or output folders are created.
 
-## Output Folder Creation, Copy, And M3U8 Stage
+## Output Folder Creation, Copy, M3U8, Reporting, And Logging Stage
 
 Run without `--dry-run` to create the safe physical output folder and execute the first real copy stage:
 
@@ -190,10 +190,38 @@ The stage writes `export_report.json` into the final folder with one result per 
 
 The same `export_report.json` also records:
 
+- `started_at`
+- `finished_at`
+- `input_path`
+- `final_output_dir`
+- `playlist_name`
+- `totals`
+- `warnings`
+- `errors`
 - `m3u_path`
 - `m3u_track_count`
 - `m3u_status`
 - `m3u_warnings` or `m3u_errors` when applicable
+- `report_txt_path`
+- `log_path`
+
+The stage also writes `export_report.txt`, a human-readable report for the completed run. It summarizes the playlist name, input path, final output folder, copied/skipped/failed/source-missing/destination-conflict/not-implemented totals, M3U8 status and path, failed or missing tracks, destination conflicts, not-yet-implemented convert tracks, and generated files.
+
+The stage writes `export.log` using only Python standard library logging. The log records the main real-run milestones: validation completed, output folder created, copy stage completed, M3U8 generated or skipped, reports written, plus warnings and errors when available.
+
+At the end of a real run, the CLI prints a final summary containing the final output folder, copied/skipped/failed/missing/conflict/not-implemented counts, M3U8 status/path, `export_report.json`, `export_report.txt`, and `export.log`.
+
+Dry-run mode does not create `export_report.txt` or `export.log`. `--report` remains a dry-run JSON report feature.
+
+Example generated files after a real run:
+
+```text
+<final_output_dir>/export_session.json
+<final_output_dir>/export_report.json
+<final_output_dir>/export_report.txt
+<final_output_dir>/export.log
+<final_output_dir>/playlist.m3u8
+```
 
 ## Strict vs Non-Strict
 
@@ -225,7 +253,7 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 
 - Source audio files are never modified.
 - Dry-run checks whether source files exist before any real output stage.
-- The copy/M3U8 stage reads source files and writes only destination copies plus generated report/playlist files in the selected output folder.
+- The copy/M3U8/report/log stage reads source files and writes only destination copies plus generated report/log/playlist files in the selected output folder.
 - Tags, if implemented later, are written only to exported copies.
 - Loudness processing, if implemented later, applies only to exported copies.
 - All outputs must stay inside the selected output folder.
@@ -263,7 +291,8 @@ pytest tests/
 - Only planned `copy` operations are executed.
 - Conversion, loudness normalization, and tag writing are not implemented yet.
 - `playlist.m3u8` includes only successfully copied files from the current run; planned conversions remain excluded as `not_implemented`.
+- `export.log` is created only for real runs after the final output folder is ready.
 
 ## Next Stage
 
-Next stage is not implemented yet. A logical next step after B7 is conversion/export handling for planned `convert` operations while keeping M3U8 generation limited to actually created output files.
+Next stage is not implemented yet. A logical next step after B8 is conversion/export handling for planned `convert` operations while keeping M3U8 generation limited to actually created output files.

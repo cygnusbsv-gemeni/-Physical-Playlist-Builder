@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ppb.copier import EXPORT_REPORT_FILENAME, CopyTrackResult, run_copy_stage
 from ppb.filesystem import OutputFolderError, build_output_folder_target, create_output_folder
 from ppb.input_readers import AUTO_INPUT_TYPE, InputReadError, read_playlist_input
+from ppb.logging_setup import close_export_logger, setup_export_logger
 from ppb.m3u import (
     DEFAULT_M3U_FILENAME,
     M3U_STATUS_FAILED,
@@ -23,7 +25,13 @@ from ppb.m3u import (
     validate_m3u_filename,
 )
 from ppb.planner import ACTION_CONVERT, ACTION_COPY, ACTION_ERROR, build_dry_run_plan
-from ppb.report import update_export_session_copy_summary, write_dry_run_report, write_export_report
+from ppb.report import (
+    EXPORT_REPORT_TEXT_FILENAME,
+    update_export_session_copy_summary,
+    write_dry_run_report,
+    write_export_report,
+    write_export_report_text,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -120,7 +128,7 @@ def print_job_summary(input_result, out_dir: Path, dry_run: bool, create_subfold
             "YES - no files will be created"
             if dry_run
             else "NO - output folder, export_session.json, copies, playlist.m3u8, "
-            "and export_report.json may be created"
+            "export_report.json, export_report.txt, and export.log may be created"
         )
     )
     print(
@@ -246,9 +254,63 @@ def print_copy_summary(copy_result) -> None:
     print("=" * 52)
 
 
+def print_final_export_summary(
+    *,
+    final_output_dir: Path | str,
+    copy_result,
+    m3u_result,
+    report_path: Path | str,
+    report_txt_path: Path | str,
+    log_path: Path | str,
+) -> None:
+    summary = copy_result.summary
+    print("=" * 52)
+    print("  Final Export Summary")
+    print("=" * 52)
+    print(f"  Final output folder: {final_output_dir}")
+    print(f"  Copied: {summary['copied']}")
+    print(f"  Skipped: {summary['skipped']}")
+    print(f"  Failed: {summary['failed']}")
+    print(f"  Missing: {summary['source_missing']}")
+    print(f"  Conflict: {summary['destination_exists']}")
+    print(f"  Not implemented: {summary['not_implemented']}")
+    print(f"  M3U8 status: {m3u_result.status}")
+    print(f"  M3U8 path: {m3u_result.m3u_path or '(none)'}")
+    print(f"  export_report.json: {report_path}")
+    print(f"  export_report.txt: {report_txt_path}")
+    print(f"  export.log: {log_path}")
+    print("=" * 52)
+
+
+def log_validation_details(logger, validation_result) -> None:
+    for warning in validation_result.global_warnings:
+        logger.warning("validation warning: %s", warning)
+    for issue in validation_result.issues:
+        if issue.level == "warning":
+            logger.warning("validation warning: %s", issue)
+        else:
+            logger.error("validation blocker: %s", issue)
+
+
+def log_copy_details(logger, copy_result) -> None:
+    for result in copy_result.results:
+        for warning in result.warnings:
+            logger.warning("track %s warning: %s", result.position, warning)
+        for error in result.errors:
+            logger.error("track %s error: %s", result.position, error)
+
+
+def log_m3u_details(logger, m3u_result) -> None:
+    for warning in m3u_result.warnings:
+        logger.warning("m3u warning: %s", warning)
+    for error in m3u_result.errors:
+        logger.error("m3u error: %s", error)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
+    run_started_at = datetime.now(timezone.utc).isoformat()
     if args.report and not args.dry_run:
         parser.error("--report requires --dry-run")
     try:
@@ -320,6 +382,15 @@ def main(argv: list[str] | None = None) -> None:
         except (OSError, OutputFolderError) as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             sys.exit(4)
+        try:
+            logger, log_path = setup_export_logger(output_result.final_output_dir)
+        except OSError as exc:
+            print(f"ERROR: could not write export.log: {exc}", file=sys.stderr)
+            sys.exit(4)
+
+        logger.info("validation completed")
+        log_validation_details(logger, result)
+        logger.info("output folder created: %s", output_result.final_output_dir)
         print(f"[output] Folder ready: {output_result.final_output_dir}")
         print(f"[output] Export session written: {output_result.export_session_path}")
         copy_result = run_copy_stage(
@@ -328,23 +399,67 @@ def main(argv: list[str] | None = None) -> None:
             overwrite=args.overwrite,
             progress_callback=print_copy_progress,
         )
+        logger.info("copy stage completed: %s", copy_result.summary)
+        log_copy_details(logger, copy_result)
         report_path = Path(output_result.final_output_dir) / EXPORT_REPORT_FILENAME
+        report_txt_path = Path(output_result.final_output_dir) / EXPORT_REPORT_TEXT_FILENAME
         m3u_result = generate_m3u8_playlist(
             job=result.job,
             copy_result=copy_result,
             final_output_dir=output_result.final_output_dir,
             m3u_name=m3u_name,
         )
+        if m3u_result.status == M3U_STATUS_GENERATED:
+            logger.info(
+                "m3u8 generated: %s (%s track(s))",
+                m3u_result.m3u_path,
+                m3u_result.track_count,
+            )
+        elif m3u_result.status == M3U_STATUS_FAILED:
+            logger.error("m3u8 failed: %s", "; ".join(m3u_result.errors))
+        else:
+            logger.info("m3u8 skipped")
+        log_m3u_details(logger, m3u_result)
         try:
-            write_export_report(copy_result, report_path, m3u_result=m3u_result)
+            run_finished_at = datetime.now(timezone.utc).isoformat()
+            write_export_report(
+                copy_result,
+                report_path,
+                m3u_result=m3u_result,
+                started_at=run_started_at,
+                finished_at=run_finished_at,
+                input_path=input_result.input_path,
+                final_output_dir=output_result.final_output_dir,
+                playlist_name=result.job.playlist_name,
+                report_txt_path=report_txt_path,
+                log_path=log_path,
+            )
+            write_export_report_text(
+                copy_result,
+                report_txt_path,
+                m3u_result=m3u_result,
+                input_path=input_result.input_path,
+                final_output_dir=output_result.final_output_dir,
+                playlist_name=result.job.playlist_name,
+                report_json_path=report_path,
+                log_path=log_path,
+            )
             update_export_session_copy_summary(
                 session_path=output_result.export_session_path,
                 copy_result=copy_result,
                 report_path=report_path,
             )
         except OSError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
+            logger.error("report writing failed: %s", exc)
+            close_export_logger(logger)
+            print(f"ERROR: could not write export report/log files: {exc}", file=sys.stderr)
             sys.exit(4)
+        logger.info(
+            "reports written: json=%s text=%s log=%s",
+            report_path,
+            report_txt_path,
+            log_path,
+        )
         print_copy_summary(copy_result)
         if m3u_result.status == M3U_STATUS_GENERATED:
             print(
@@ -357,6 +472,17 @@ def main(argv: list[str] | None = None) -> None:
         else:
             print("[output] M3U8 skipped by settings.generate_m3u8=false")
         print(f"[output] Export report written: {report_path}")
+        print(f"[output] Human-readable report written: {report_txt_path}")
+        print(f"[output] Export log written: {log_path}")
+        print_final_export_summary(
+            final_output_dir=output_result.final_output_dir,
+            copy_result=copy_result,
+            m3u_result=m3u_result,
+            report_path=report_path,
+            report_txt_path=report_txt_path,
+            log_path=log_path,
+        )
+        close_export_logger(logger)
         if m3u_result.status == M3U_STATUS_FAILED:
             sys.exit(4)
 

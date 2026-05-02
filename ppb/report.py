@@ -25,6 +25,27 @@ from ppb.planner import DryRunPlan
 
 EXPORT_REPORT_TEXT_FILENAME = "export_report.txt"
 
+LOUDNESS_STATUS_MEASURED = "measured"
+LOUDNESS_STATUS_SKIPPED = "skipped"
+LOUDNESS_STATUS_FAILED = "failed"
+LOUDNESS_STATUS_FFMPEG_MISSING = "ffmpeg_missing"
+LOUDNESS_STATUSES = {
+    LOUDNESS_STATUS_MEASURED,
+    LOUDNESS_STATUS_SKIPPED,
+    LOUDNESS_STATUS_FAILED,
+    LOUDNESS_STATUS_FFMPEG_MISSING,
+}
+LOUDNESS_FIELD_DEFAULTS: dict[str, Any] = {
+    "loudness_status": LOUDNESS_STATUS_SKIPPED,
+    "input_i": None,
+    "input_tp": None,
+    "input_lra": None,
+    "input_thresh": None,
+    "target_offset": None,
+    "loudness_error": None,
+    "loudness_stderr_summary": "",
+}
+
 
 def dry_run_plan_to_dict(plan: DryRunPlan) -> dict[str, Any]:
     """Return a stable JSON-serializable representation of a dry-run plan."""
@@ -129,6 +150,8 @@ def export_report_to_dict(
     copy_result: CopyStageResult,
     m3u_result: M3UGenerationResult | None = None,
     *,
+    loudness_results: list[dict[str, Any]] | None = None,
+    loudness_summary: dict[str, Any] | None = None,
     started_at: str | None = None,
     finished_at: str | None = None,
     input_path: Path | str | None = None,
@@ -146,6 +169,12 @@ def export_report_to_dict(
     if m3u_result is not None:
         warnings.extend(m3u_result.warnings)
         errors.extend(m3u_result.errors)
+    normalized_loudness_results = _normalize_loudness_results(
+        copy_result,
+        loudness_results,
+    )
+    loudness_totals = _count_loudness_statuses(normalized_loudness_results)
+    errors.extend(_collect_loudness_errors(copy_result, normalized_loudness_results))
 
     report = {
         "format": "physical_playlist_export_report.v1",
@@ -162,9 +191,17 @@ def export_report_to_dict(
         },
         "totals": copy_result.summary,
         "summary": copy_result.summary,
+        "loudness_totals": loudness_totals,
+        "loudness": _loudness_summary_to_dict(
+            loudness_summary,
+            loudness_totals=loudness_totals,
+        ),
         "warnings": warnings,
         "errors": errors,
-        "tracks": [asdict(result) for result in copy_result.results],
+        "tracks": [
+            _copy_track_result_to_dict(result, loudness)
+            for result, loudness in zip(copy_result.results, normalized_loudness_results)
+        ],
         "report_txt_path": str(report_txt_path) if report_txt_path is not None else None,
         "log_path": str(log_path) if log_path is not None else None,
     }
@@ -177,6 +214,8 @@ def write_export_report(
     report_path: Path | str,
     m3u_result: M3UGenerationResult | None = None,
     *,
+    loudness_results: list[dict[str, Any]] | None = None,
+    loudness_summary: dict[str, Any] | None = None,
     started_at: str | None = None,
     finished_at: str | None = None,
     input_path: Path | str | None = None,
@@ -194,6 +233,8 @@ def write_export_report(
             export_report_to_dict(
                 copy_result,
                 m3u_result=m3u_result,
+                loudness_results=loudness_results,
+                loudness_summary=loudness_summary,
                 started_at=started_at,
                 finished_at=finished_at,
                 input_path=input_path,
@@ -216,6 +257,8 @@ def write_export_report_text(
     report_path: Path | str,
     *,
     m3u_result: M3UGenerationResult | None = None,
+    loudness_results: list[dict[str, Any]] | None = None,
+    loudness_summary: dict[str, Any] | None = None,
     input_path: Path | str | None = None,
     final_output_dir: Path | str | None = None,
     playlist_name: str | None = None,
@@ -227,6 +270,15 @@ def write_export_report_text(
     path = Path(report_path)
     output_dir = str(final_output_dir) if final_output_dir is not None else copy_result.output_dir
     summary = copy_result.summary
+    normalized_loudness_results = _normalize_loudness_results(
+        copy_result,
+        loudness_results,
+    )
+    loudness_totals = _count_loudness_statuses(normalized_loudness_results)
+    loudness_metadata = _loudness_summary_to_dict(
+        loudness_summary,
+        loudness_totals=loudness_totals,
+    )
     lines: list[str] = [
         "Physical Playlist Builder Export Report",
         "=" * 40,
@@ -243,6 +295,17 @@ def write_export_report_text(
         f"Source missing: {summary.get('source_missing', 0)}",
         f"Destination exists: {summary.get('destination_exists', 0)}",
         f"FFmpeg missing: {summary.get('ffmpeg_missing', 0)}",
+        "",
+        "Loudness Measurement",
+        "-" * 40,
+        f"Status: {loudness_metadata.get('status', 'skipped')}",
+        f"Reason: {loudness_metadata.get('reason') or '(none)'}",
+        f"Target LUFS: {_format_optional_value(loudness_metadata.get('target_lufs'))}",
+        f"True peak dB: {_format_optional_value(loudness_metadata.get('true_peak_db'))}",
+        f"Measured: {loudness_totals.get(LOUDNESS_STATUS_MEASURED, 0)}",
+        f"Skipped: {loudness_totals.get(LOUDNESS_STATUS_SKIPPED, 0)}",
+        f"Failed: {loudness_totals.get(LOUDNESS_STATUS_FAILED, 0)}",
+        f"FFmpeg missing: {loudness_totals.get(LOUDNESS_STATUS_FFMPEG_MISSING, 0)}",
         "",
         "M3U8",
         "-" * 40,
@@ -264,6 +327,7 @@ def write_export_report_text(
         copy_result.results,
         {STATUS_DESTINATION_EXISTS},
     )
+    _append_loudness_failure_section(lines, copy_result.results, normalized_loudness_results)
     if summary.get(STATUS_NOT_IMPLEMENTED, 0):
         _append_track_section(
             lines,
@@ -288,6 +352,7 @@ def write_export_report_text(
     if m3u_result is not None:
         warnings.extend(m3u_result.warnings)
         errors.extend(m3u_result.errors)
+    errors.extend(_collect_loudness_errors(copy_result, normalized_loudness_results))
     _append_message_section(lines, "Warnings", warnings)
     _append_message_section(lines, "Errors", errors)
 
@@ -336,6 +401,107 @@ def _m3u_metadata_to_dict(m3u_result: M3UGenerationResult | None) -> dict[str, A
     return data
 
 
+def _normalize_loudness_results(
+    copy_result: CopyStageResult,
+    loudness_results: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    if loudness_results is None:
+        return [
+            _loudness_result_with_defaults(
+                {
+                    "loudness_status": LOUDNESS_STATUS_SKIPPED,
+                    "loudness_skip_reason": "loudness measurement was not provided.",
+                }
+            )
+            for _result in copy_result.results
+        ]
+
+    normalized: list[dict[str, Any]] = []
+    for index, _result in enumerate(copy_result.results):
+        if index < len(loudness_results):
+            normalized.append(_loudness_result_with_defaults(loudness_results[index]))
+        else:
+            normalized.append(
+                _loudness_result_with_defaults(
+                    {
+                        "loudness_status": LOUDNESS_STATUS_SKIPPED,
+                        "loudness_skip_reason": "loudness measurement result is missing.",
+                    }
+                )
+            )
+    return normalized
+
+
+def _loudness_result_with_defaults(data: dict[str, Any]) -> dict[str, Any]:
+    result = dict(LOUDNESS_FIELD_DEFAULTS)
+    result.update(data)
+    status = str(result.get("loudness_status") or LOUDNESS_STATUS_SKIPPED)
+    if status not in LOUDNESS_STATUSES:
+        status = LOUDNESS_STATUS_FAILED
+        result["loudness_error"] = "Unknown loudness status in report data."
+    result["loudness_status"] = status
+    return result
+
+
+def _count_loudness_statuses(loudness_results: list[dict[str, Any]]) -> dict[str, int]:
+    totals = {
+        LOUDNESS_STATUS_MEASURED: 0,
+        LOUDNESS_STATUS_SKIPPED: 0,
+        LOUDNESS_STATUS_FAILED: 0,
+        LOUDNESS_STATUS_FFMPEG_MISSING: 0,
+        "total": len(loudness_results),
+    }
+    for result in loudness_results:
+        status = str(result.get("loudness_status") or LOUDNESS_STATUS_SKIPPED)
+        totals[status] = totals.get(status, 0) + 1
+    return totals
+
+
+def _loudness_summary_to_dict(
+    loudness_summary: dict[str, Any] | None,
+    *,
+    loudness_totals: dict[str, int],
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "status": LOUDNESS_STATUS_SKIPPED,
+        "reason": "loudness measurement was not provided.",
+        "normalize_loudness": None,
+        "skip_loudness": None,
+        "target_lufs": None,
+        "true_peak_db": None,
+        "totals": loudness_totals,
+    }
+    if loudness_summary is not None:
+        summary.update(loudness_summary)
+    summary["totals"] = loudness_totals
+    return summary
+
+
+def _copy_track_result_to_dict(
+    result: CopyTrackResult,
+    loudness_result: dict[str, Any],
+) -> dict[str, Any]:
+    data = asdict(result)
+    data.update(loudness_result)
+    return data
+
+
+def _collect_loudness_errors(
+    copy_result: CopyStageResult,
+    loudness_results: list[dict[str, Any]],
+) -> list[str]:
+    errors: list[str] = []
+    for result, loudness in zip(copy_result.results, loudness_results):
+        status = loudness.get("loudness_status")
+        if status not in {LOUDNESS_STATUS_FAILED, LOUDNESS_STATUS_FFMPEG_MISSING}:
+            continue
+        detail = loudness.get("loudness_error") or loudness.get("loudness_stderr_summary")
+        if not detail:
+            detail = "loudness measurement failed without details."
+        errors.append(f"track {result.position} loudness {status}: {detail}")
+    return errors
+
+
 def _collect_copy_messages(copy_result: CopyStageResult) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
     errors: list[str] = []
@@ -371,6 +537,38 @@ def _append_track_section(
     lines.append("")
 
 
+def _append_loudness_failure_section(
+    lines: list[str],
+    results: list[CopyTrackResult],
+    loudness_results: list[dict[str, Any]],
+) -> None:
+    lines.extend(["Loudness Failures", "-" * 40])
+    matching = [
+        (result, loudness)
+        for result, loudness in zip(results, loudness_results)
+        if loudness.get("loudness_status")
+        in {LOUDNESS_STATUS_FAILED, LOUDNESS_STATUS_FFMPEG_MISSING}
+    ]
+    if not matching:
+        lines.extend(["None", ""])
+        return
+    for result, loudness in matching:
+        lines.append(
+            f"track {result.position}: {loudness.get('loudness_status')} | "
+            f"{result.expected_output_filename or '(no output filename)'} | "
+            f"destination={result.destination_path or '(no destination)'}"
+        )
+        error = loudness.get("loudness_error")
+        if error:
+            lines.append(f"  error: {error}")
+        stderr_summary = loudness.get("loudness_stderr_summary")
+        if stderr_summary:
+            lines.append("  loudness stderr summary:")
+            for line in str(stderr_summary).splitlines():
+                lines.append(f"    {line}")
+    lines.append("")
+
+
 def _format_track_result(result: CopyTrackResult) -> str:
     filename = result.expected_output_filename or "(no output filename)"
     destination = result.destination_path or "(no destination)"
@@ -388,3 +586,9 @@ def _append_message_section(lines: list[str], title: str, messages: list[str]) -
     for message in messages:
         lines.append(message)
     lines.append("")
+
+
+def _format_optional_value(value: Any) -> str:
+    if value is None:
+        return "(none)"
+    return str(value)

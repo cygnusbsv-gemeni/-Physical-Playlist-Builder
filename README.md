@@ -6,7 +6,7 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: B10.1 loudness measurement groundwork. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. It also has a reusable low-level ffmpeg loudnorm first-pass helper for measuring loudness when called directly from code. The main export workflow does not run loudness measurement or normalization yet, and the tool does not write tags, resume interrupted exports, or bundle ffmpeg.
+Current stage: B10.2 loudness measurement for exported copies. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, measures loudness for successfully exported output files when `settings.normalize_loudness=true`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. Loudness measurement is read-only and records first-pass `loudnorm` values only; loudness normalization, tag writing, resume, and bundled ffmpeg are not implemented.
 
 ## Supported Input Types
 
@@ -114,7 +114,7 @@ Arguments:
 | `--ffmpeg` | No | Path to an ffmpeg executable for planned `convert` operations. If omitted, `ffmpeg` is resolved from `PATH`. |
 | `--mp3-quality` | No | MP3 VBR quality value from `0` to `9` for planned MP3 conversion. Default: `2`. Ignored for non-MP3 formats. |
 | `--audio-bitrate` | No | Audio bitrate such as `192k` for planned conversion. Used for MP3/AAC-style encoders when provided. |
-| `--skip-loudness` | No | Reserved no-op flag for future loudness stages. In B10.1, export behavior is unchanged and no loudness measurement or normalization is run by the CLI. |
+| `--skip-loudness` | No | Skip loudness measurement during real export. Loudness normalization is still not implemented. |
 
 Input type detection defaults to file extension. `.json` is treated as canonical `physical_playlist_job.v1` JSON, `.txt` as a plain path list, `.csv` as tabular input, and `.m3u` / `.m3u8` as playlist files.
 
@@ -160,7 +160,7 @@ Then dry-run prints an operation plan with:
 
 When `--report` is passed, the same plan is written as JSON. No music files or output folders are created.
 
-## Output Folder Creation, Copy, Conversion, M3U8, Reporting, And Logging Stage
+## Output Folder Creation, Copy, Conversion, Loudness Measurement, M3U8, Reporting, And Logging Stage
 
 Run without `--dry-run` to create the safe physical output folder and execute the real export stage:
 
@@ -181,6 +181,10 @@ The output stage writes `export_session.json` into the final folder. This file r
 After the folder is ready, the export stage copies tracks whose planned action is `copy` and converts tracks whose planned action is `convert`. Conversion uses `ppb/ffmpeg_tools.py` and writes only destination files inside the final output folder. Blocked tracks are skipped, missing sources are reported as `source_missing`, and existing destination files are reported as `destination_exists` unless `--overwrite` is passed. Each copied file is size-checked after copy. Converted files are verified by the ffmpeg helper by checking that the destination file was created.
 
 When planned convert tracks exist, ffmpeg is resolved from `--ffmpeg` or from `PATH`. If ffmpeg is missing or not runnable, copy-only tracks still proceed, convert tracks are reported as `ffmpeg_missing`, and the error is written to `export_report.json`, `export_report.txt`, and `export.log`.
+
+After copying and conversion, the tool evaluates loudness measurement for the final exported audio files only. Measurement runs only in real non-dry-run exports, only for tracks whose export status is `copied` or `converted`, only for destination files inside the final output folder, and only when `settings.normalize_loudness=true` and `--skip-loudness` is not passed. Failed, skipped, missing, conflicted, blocked, and `ffmpeg_missing` tracks are not measured. When measurement runs, the CLI calls the existing ffmpeg `loudnorm` first-pass helper with `target_lufs` and `true_peak_db` from job settings. The helper writes to ffmpeg's `null` muxer and does not create, rewrite, replace, rename, delete, normalize, or tag audio files.
+
+If `settings.normalize_loudness=false` or `--skip-loudness` is passed, loudness measurement is skipped and the skip is recorded in `export_report.json`, `export_report.txt`, and `export.log`. If ffmpeg is missing during loudness measurement, the export does not crash; already copied or converted files remain in place, loudness status is recorded as `ffmpeg_missing`, and `playlist.m3u8` generation still uses the same successfully exported files.
 
 Then the tool evaluates `settings.generate_m3u8` from the normalized job. If the setting is `true` or missing, the CLI generates a UTF-8 `playlist.m3u8` (or the filename passed via `--m3u-name`) inside the same final output folder. If the setting is `false`, M3U8 generation is skipped and the skip is recorded in `export_report.json`.
 
@@ -210,34 +214,47 @@ The same `export_report.json` also records:
 - `m3u_track_count`
 - `m3u_status`
 - `m3u_warnings` or `m3u_errors` when applicable
+- `loudness`
+- `loudness_totals`
 - `report_txt_path`
 - `log_path`
 
-The stage also writes `export_report.txt`, a human-readable report for the completed run. It summarizes the playlist name, input path, final output folder, copied/converted/skipped/failed/source-missing/destination-conflict/ffmpeg-missing totals, M3U8 status and path, failed or missing tracks, destination conflicts, and generated files.
+Each track record in `export_report.json` includes loudness fields:
 
-The stage writes `export.log` using only Python standard library logging. The log records the main real-run milestones: validation completed, output folder created, export stage completed, conversions or copy operations, M3U8 generated or skipped, reports written, plus warnings and errors when available.
+- `loudness_status`: `measured`, `skipped`, `failed`, or `ffmpeg_missing`
+- `input_i`
+- `input_tp`
+- `input_lra`
+- `input_thresh`
+- `target_offset`
+- `loudness_error`
+- `loudness_stderr_summary`
+
+The stage also writes `export_report.txt`, a human-readable report for the completed run. It summarizes the playlist name, input path, final output folder, copied/converted/skipped/failed/source-missing/destination-conflict/ffmpeg-missing totals, loudness measured/skipped/failed/ffmpeg-missing totals, per-track loudness failures, M3U8 status and path, failed or missing tracks, destination conflicts, and generated files.
+
+The stage writes `export.log` using only Python standard library logging. The log records the main real-run milestones: validation completed, output folder created, export stage completed, conversions or copy operations, loudness measurement started, per-track loudness success/failure/skip entries, loudness measurement completed, M3U8 generated or skipped, reports written, plus warnings and errors when available.
 
 At the end of a real run, the CLI prints a final summary containing the final output folder, copied/converted/skipped/failed/missing/conflict/ffmpeg-missing counts, M3U8 status/path, `export_report.json`, `export_report.txt`, and `export.log`.
 
 Dry-run mode does not create `export_report.txt` or `export.log`. `--report` remains a dry-run JSON report feature.
 
-## FFmpeg Conversion And Loudness Measurement Groundwork
+## FFmpeg Conversion And Loudness Measurement
 
-`ppb/ffmpeg_tools.py` is the reusable low-level helper used by the main export workflow for planned `convert` tracks. It can:
+`ppb/ffmpeg_tools.py` is the reusable low-level helper used by the main export workflow for planned `convert` tracks and B10.2 loudness measurement. It can:
 
 - resolve ffmpeg from `PATH` or from an explicit executable path;
 - validate the executable by running `ffmpeg -version`;
 - convert one source file into one destination file inside an explicitly provided output folder;
 - avoid overwriting destinations unless `overwrite=True`;
 - create destination parent folders only inside the output folder boundary;
-- capture ffmpeg return code, stdout, stderr, and a stderr summary.
-- measure loudness through a read-only ffmpeg loudnorm first pass when `measure_loudness_first_pass()` is called directly from code.
+- capture ffmpeg return code, stdout, stderr, and a stderr summary;
+- measure loudness through a read-only ffmpeg loudnorm first pass for exported output files.
 
 Supported helper-level target formats are `mp3`, `flac`, `wav`, `m4a`, and `aac`. MP3 uses `libmp3lame` with default VBR quality `2`; `m4a` and `aac` use ffmpeg's native `aac` encoder when available in the local ffmpeg build. Sample rate is preserved by default because the helper does not pass `-ar`.
 
 In the main CLI workflow, planned `convert` tracks use the normalized job target format, normally `settings.output_format`, and the planned output filename from the dry-run plan. Successful conversions are reported as `converted` and are included in `playlist.m3u8`. Failed conversions are reported as `failed`, `source_missing`, `destination_exists`, or `ffmpeg_missing` and are excluded from `playlist.m3u8`. If ffmpeg creates a partial destination file for a failed conversion and that destination did not exist before the run, the helper removes that partial file inside the output folder. The per-track JSON result records the target format, ffmpeg return code when available, and an ffmpeg stderr summary when conversion fails.
 
-B10.1 adds only the low-level loudness measurement helper. It runs ffmpeg with the `loudnorm` filter in first-pass mode and writes output to ffmpeg's `null` muxer, so it does not create, modify, replace, delete, or rename audio files. It returns structured fields including `success`, `return_code`, `input_i`, `input_tp`, `input_lra`, `input_thresh`, `target_offset`, raw loudnorm JSON payload, and stderr diagnostics. This helper is not called by the CLI export workflow yet; `--skip-loudness` exists only as a future-facing no-op option.
+B10.2 calls `measure_loudness_first_pass()` from the CLI workflow after successful copy/conversion. It runs ffmpeg with the `loudnorm` filter in first-pass mode and writes output to ffmpeg's `null` muxer, so it does not create, modify, replace, delete, rename, normalize, or tag audio files. It returns structured fields including `success`, `return_code`, `input_i`, `input_tp`, `input_lra`, `input_thresh`, `target_offset`, raw loudnorm JSON payload, and stderr diagnostics. The CLI stores these values in reports and logs only.
 
 Example generated files after a real run:
 
@@ -281,9 +298,11 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 - Dry-run checks whether source files exist before any real output stage.
 - The copy/conversion/M3U8/report/log stage reads source files and writes only exported audio files plus generated report/log/playlist files in the selected output folder.
 - ffmpeg conversion receives source files only as inputs and writes destination files only inside the selected final output folder.
-- The B10.1 loudness measurement helper receives source or exported audio files only as ffmpeg inputs and writes measurement output to the `null` muxer; it is not run automatically by the CLI.
+- B10.2 loudness measurement receives only successfully exported destination files inside the final output folder as ffmpeg inputs and writes output to the `null` muxer.
+- Loudness measurement never reads source audio files directly in the CLI workflow.
+- Loudness measurement does not normalize, replace, rename, delete, or tag audio files.
 - Tags, if implemented later, are written only to exported copies.
-- Loudness processing, if implemented later, applies only to exported copies.
+- Future loudness normalization, if implemented later, must apply only to exported copies.
 - All outputs must stay inside the selected output folder.
 - Existing files must not be silently overwritten.
 - Existing non-empty output folders are rejected unless `--overwrite` is passed.
@@ -313,13 +332,13 @@ pip install -r requirements.txt
 pytest tests/
 ```
 
-Focused B10.1 checks:
+Focused B10.2 checks:
 
 ```bash
 python -m ppb.cli --help
-python -m py_compile ppb\cli.py ppb\ffmpeg_tools.py
-python -m pytest tests\test_ffmpeg_conversion.py -vv --tb=short --basetemp C:\Temp\project_pytest\b10_1_conversion -p no:cacheprovider
-python -m pytest tests\test_copier.py tests\test_cli_u1.py -q --basetemp C:\Temp\project_pytest\b10_1_regression -p no:cacheprovider
+python -m py_compile ppb\cli.py ppb\report.py ppb\logging_setup.py ppb\ffmpeg_tools.py
+python -m pytest tests\test_ffmpeg_conversion.py -vv --tb=short --basetemp C:\Temp\project_pytest\b10_2_conversion -p no:cacheprovider
+python -m pytest tests\test_copier.py tests\test_cli_u1.py -q --basetemp C:\Temp\project_pytest\b10_2_regression -p no:cacheprovider
 ```
 
 If `C:\Temp` is not writable in the local environment, use another explicit pytest temp directory outside the repository when possible. The focused conversion tests generate synthetic WAV fixtures with Python standard library `wave`; they do not use real user music files. Tests that require real WAV to MP3 conversion skip cleanly when ffmpeg is not available.
@@ -328,8 +347,8 @@ If `C:\Temp` is not writable in the local environment, use another explicit pyte
 
 - TXT, CSV, M3U, and M3U8 inputs carry less metadata than canonical JSON.
 - ffmpeg must be installed on `PATH` or passed with `--ffmpeg` for planned `convert` tracks to succeed.
-- If ffmpeg is missing, planned `convert` tracks are marked `ffmpeg_missing`; copy-only tracks can still complete.
-- Loudness measurement exists only as a low-level helper; the main CLI export workflow does not run it yet.
+- If ffmpeg is missing for conversion, planned `convert` tracks are marked `ffmpeg_missing`; copy-only tracks can still complete.
+- If ffmpeg is missing for loudness measurement, successfully copied or converted files remain intact and per-track loudness status is recorded as `ffmpeg_missing`.
 - Loudness normalization and tag writing are not implemented yet.
 - Resume of interrupted exports is not implemented yet.
 - `playlist.m3u8` includes only successfully copied or converted files from the current run.
@@ -338,4 +357,4 @@ If `C:\Temp` is not writable in the local environment, use another explicit pyte
 
 ## Next Stage
 
-Next stage is not implemented yet. A logical next step after B10.1 is a focused stage that calls the loudness measurement helper on exported copies and records the results, without replacing files until a later normalization stage. Loudness normalization, tag writing, and resume remain not implemented.
+Next stage is not implemented yet. A logical next step after B10.2 is a focused loudness normalization design/implementation stage that uses measured values on exported copies only and still preserves source files. Loudness normalization, tag writing, and resume remain not implemented.

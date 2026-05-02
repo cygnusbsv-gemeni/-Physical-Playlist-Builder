@@ -126,6 +126,15 @@ def build_parser() -> argparse.ArgumentParser:
             "Audio bitrate such as 192k for planned conversion."
         ),
     )
+    parser.add_argument(
+        "--skip-loudness",
+        action="store_true",
+        default=False,
+        help=(
+            "Reserved for future loudness stages. B10.1 does not run "
+            "loudness measurement or normalization during export."
+        ),
+    )
     return parser
 
 

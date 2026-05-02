@@ -1,0 +1,1 @@
+python -m ppb.cli --input minor.json --out .\out --audio-bitrate 320k

@@ -1,12 +1,14 @@
-"""Small, isolated ffmpeg helpers for future conversion stages.
+"""Small, isolated ffmpeg helpers for conversion and loudness groundwork.
 
-This module is intentionally not wired into the main CLI export workflow yet.
-It only provides executable discovery and a single-file conversion helper that
-writes inside an explicitly supplied output folder.
+Conversion is used by the main export workflow. Loudness measurement is a
+low-level helper for future normalization stages and is intentionally not wired
+into the export workflow yet.
 """
 
 from __future__ import annotations
 
+import json
+import math
 import os
 import re
 import shutil
@@ -21,11 +23,17 @@ STATUS_FAILED = "failed"
 STATUS_FFMPEG_UNAVAILABLE = "ffmpeg_unavailable"
 STATUS_SOURCE_MISSING = "source_missing"
 STATUS_UNSUPPORTED_FORMAT = "unsupported_format"
+STATUS_LOUDNESS_MEASURED = "measured"
+STATUS_LOUDNESS_PARSE_FAILED = "loudnorm_parse_failed"
 
 SUPPORTED_TARGET_FORMATS = {"mp3", "flac", "wav", "m4a", "aac"}
 DEFAULT_MP3_QUALITY = 2
+DEFAULT_TARGET_LUFS = -14.0
+DEFAULT_TRUE_PEAK_DB = -1.0
+DEFAULT_LOUDNESS_RANGE_LUFS = 11.0
 
 _BITRATE_RE = re.compile(r"^[1-9][0-9]*[kKmM]?$")
+_LOUDNORM_REQUIRED_KEYS = ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")
 
 
 @dataclass(frozen=True)
@@ -61,6 +69,34 @@ class FfmpegConversionResult:
     stderr_summary: str = ""
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class FfmpegLoudnessMeasurementResult:
+    """Structured result for an ffmpeg loudnorm first-pass measurement."""
+
+    success: bool
+    status: str
+    source_path: str
+    ffmpeg: FfmpegResolutionResult | None = None
+    command: list[str] = field(default_factory=list)
+    return_code: int | None = None
+    input_i: float | None = None
+    input_tp: float | None = None
+    input_lra: float | None = None
+    input_thresh: float | None = None
+    target_offset: float | None = None
+    raw_loudnorm_payload: dict[str, object] = field(default_factory=dict)
+    stdout: str = ""
+    stderr: str = ""
+    stderr_summary: str = ""
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        """Compatibility alias for callers that use ``ok`` result fields."""
+
+        return self.success
 
 
 def resolve_ffmpeg(
@@ -337,6 +373,190 @@ def convert_audio_file(
     )
 
 
+def measure_loudness_first_pass(
+    *,
+    source_path: Path | str,
+    ffmpeg: FfmpegResolutionResult | Path | str | None = None,
+    target_lufs: float | int | str | None = DEFAULT_TARGET_LUFS,
+    true_peak_db: float | int | str | None = DEFAULT_TRUE_PEAK_DB,
+    loudness_range_lufs: float | int | str | None = DEFAULT_LOUDNESS_RANGE_LUFS,
+    timeout_sec: float | None = None,
+) -> FfmpegLoudnessMeasurementResult:
+    """Measure loudness with ffmpeg's loudnorm filter first pass.
+
+    The source file is only passed to ffmpeg as an input. The command writes to
+    the ``null`` muxer and never creates, rewrites, renames, deletes, or replaces
+    audio files.
+    """
+
+    source = Path(source_path).expanduser()
+    source_resolved = source.resolve(strict=False)
+
+    target = _normalize_loudnorm_target_value(
+        target_lufs,
+        default=DEFAULT_TARGET_LUFS,
+        name="target_lufs",
+    )
+    true_peak = _normalize_loudnorm_target_value(
+        true_peak_db,
+        default=DEFAULT_TRUE_PEAK_DB,
+        name="true_peak_db",
+    )
+    lra_target = _normalize_loudnorm_target_value(
+        loudness_range_lufs,
+        default=DEFAULT_LOUDNESS_RANGE_LUFS,
+        name="loudness_range_lufs",
+    )
+    target_errors = [
+        result.error
+        for result in (target, true_peak, lra_target)
+        if result.error is not None
+    ]
+    if target_errors:
+        return FfmpegLoudnessMeasurementResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            errors=target_errors,
+        )
+
+    if not source.is_file():
+        return FfmpegLoudnessMeasurementResult(
+            success=False,
+            status=STATUS_SOURCE_MISSING,
+            source_path=str(source_resolved),
+            errors=[f"Source file does not exist on disk: {source}"],
+        )
+
+    resolution = _ensure_ffmpeg_resolution(ffmpeg)
+    if not resolution.ok:
+        return FfmpegLoudnessMeasurementResult(
+            success=False,
+            status=STATUS_FFMPEG_UNAVAILABLE,
+            source_path=str(source_resolved),
+            ffmpeg=resolution,
+            errors=[resolution.error or "ffmpeg executable could not be resolved."],
+        )
+
+    command = _build_loudness_measurement_command(
+        executable=resolution.executable or "ffmpeg",
+        source=source,
+        target_lufs=target.value,
+        true_peak_db=true_peak.value,
+        loudness_range_lufs=lra_target.value,
+    )
+
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_sec,
+        )
+    except OSError as exc:
+        return FfmpegLoudnessMeasurementResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            ffmpeg=resolution,
+            command=command,
+            errors=[f"ffmpeg loudness measurement failed: {exc}"],
+        )
+    except subprocess.TimeoutExpired as exc:
+        stderr = exc.stderr or ""
+        return FfmpegLoudnessMeasurementResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            ffmpeg=resolution,
+            command=command,
+            stdout=exc.stdout or "",
+            stderr=stderr,
+            stderr_summary=_summarize_stderr(stderr),
+            errors=[f"ffmpeg loudness measurement timed out after {timeout_sec:g} seconds."],
+        )
+
+    stdout = completed.stdout or ""
+    stderr = completed.stderr or ""
+    stderr_summary = _summarize_stderr(stderr)
+    parse_result = _parse_loudnorm_payload(stdout=stdout, stderr=stderr)
+    if parse_result.error is not None or parse_result.payload is None:
+        errors = []
+        if completed.returncode != 0:
+            errors.append(f"ffmpeg loudness measurement failed with exit code {completed.returncode}.")
+        errors.append(parse_result.error or "Could not parse ffmpeg loudnorm JSON output.")
+        return FfmpegLoudnessMeasurementResult(
+            success=False,
+            status=STATUS_LOUDNESS_PARSE_FAILED if completed.returncode == 0 else STATUS_FAILED,
+            source_path=str(source_resolved),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            errors=errors,
+        )
+
+    payload = parse_result.payload
+    values = _extract_loudnorm_values(payload)
+    if values.error is not None:
+        return FfmpegLoudnessMeasurementResult(
+            success=False,
+            status=STATUS_LOUDNESS_PARSE_FAILED,
+            source_path=str(source_resolved),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            raw_loudnorm_payload=payload,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            errors=[values.error],
+        )
+
+    if completed.returncode != 0:
+        return FfmpegLoudnessMeasurementResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            input_i=values.input_i,
+            input_tp=values.input_tp,
+            input_lra=values.input_lra,
+            input_thresh=values.input_thresh,
+            target_offset=values.target_offset,
+            raw_loudnorm_payload=payload,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            errors=[f"ffmpeg loudness measurement failed with exit code {completed.returncode}."],
+        )
+
+    return FfmpegLoudnessMeasurementResult(
+        success=True,
+        status=STATUS_LOUDNESS_MEASURED,
+        source_path=str(source_resolved),
+        ffmpeg=resolution,
+        command=command,
+        return_code=completed.returncode,
+        input_i=values.input_i,
+        input_tp=values.input_tp,
+        input_lra=values.input_lra,
+        input_thresh=values.input_thresh,
+        target_offset=values.target_offset,
+        raw_loudnorm_payload=payload,
+        stdout=stdout,
+        stderr=stderr,
+        stderr_summary=stderr_summary,
+    )
+
+
 @dataclass(frozen=True)
 class _CandidateResult:
     executable: str
@@ -347,6 +567,36 @@ class _CandidateResult:
 class _BitrateResult:
     value: str | None
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class _FloatResult:
+    value: float
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class _LoudnormParseResult:
+    payload: dict[str, object] | None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class _LoudnormValueResult:
+    input_i: float | None = None
+    input_tp: float | None = None
+    input_lra: float | None = None
+    input_thresh: float | None = None
+    target_offset: float | None = None
+    error: str | None = None
+
+
+def _ensure_ffmpeg_resolution(
+    ffmpeg: FfmpegResolutionResult | Path | str | None,
+) -> FfmpegResolutionResult:
+    if isinstance(ffmpeg, FfmpegResolutionResult):
+        return ffmpeg
+    return resolve_ffmpeg(ffmpeg)
 
 
 def _resolve_candidate(ffmpeg_path: Path | str | None) -> _CandidateResult:
@@ -428,6 +678,39 @@ def _validate_conversion_request(
         errors.append("Destination path must not be the same file as the source path.")
 
     return errors
+
+
+def _build_loudness_measurement_command(
+    *,
+    executable: str,
+    source: Path,
+    target_lufs: float,
+    true_peak_db: float,
+    loudness_range_lufs: float,
+) -> list[str]:
+    loudnorm_filter = (
+        "loudnorm="
+        f"I={_format_ffmpeg_number(target_lufs)}:"
+        f"TP={_format_ffmpeg_number(true_peak_db)}:"
+        f"LRA={_format_ffmpeg_number(loudness_range_lufs)}:"
+        "print_format=json"
+    )
+    return [
+        executable,
+        "-hide_banner",
+        "-nostdin",
+        "-nostats",
+        "-i",
+        str(source),
+        "-map",
+        "0:a:0",
+        "-vn",
+        "-af",
+        loudnorm_filter,
+        "-f",
+        "null",
+        "-",
+    ]
 
 
 def _build_ffmpeg_command(
@@ -519,6 +802,85 @@ def _normalize_audio_bitrate(audio_bitrate: int | str | None) -> _BitrateResult:
             error="audio_bitrate must be a positive value like 192k, 256k, or 1411k.",
         )
     return _BitrateResult(value=value)
+
+
+def _normalize_loudnorm_target_value(
+    value: float | int | str | None,
+    *,
+    default: float,
+    name: str,
+) -> _FloatResult:
+    raw_value = default if value is None else value
+    try:
+        normalized = float(raw_value)
+    except (TypeError, ValueError):
+        return _FloatResult(value=default, error=f"{name} must be a finite number.")
+    if not math.isfinite(normalized):
+        return _FloatResult(value=default, error=f"{name} must be a finite number.")
+    return _FloatResult(value=normalized)
+
+
+def _format_ffmpeg_number(value: float) -> str:
+    return f"{value:g}"
+
+
+def _parse_loudnorm_payload(*, stdout: str, stderr: str) -> _LoudnormParseResult:
+    decode_errors: list[str] = []
+    for stream_name, text in (("stderr", stderr), ("stdout", stdout)):
+        candidate = _extract_loudnorm_json_candidate(text)
+        if candidate is None:
+            continue
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            decode_errors.append(f"{stream_name}: {exc}")
+            continue
+        if not isinstance(payload, dict):
+            decode_errors.append(f"{stream_name}: loudnorm JSON was not an object.")
+            continue
+        if not any(key in payload for key in _LOUDNORM_REQUIRED_KEYS):
+            decode_errors.append(f"{stream_name}: JSON object did not look like loudnorm output.")
+            continue
+        return _LoudnormParseResult(payload=payload)
+
+    if decode_errors:
+        return _LoudnormParseResult(
+            payload=None,
+            error="Could not parse ffmpeg loudnorm JSON output: " + "; ".join(decode_errors),
+        )
+    return _LoudnormParseResult(
+        payload=None,
+        error="Could not find ffmpeg loudnorm JSON output in stderr or stdout.",
+    )
+
+
+def _extract_loudnorm_json_candidate(text: str) -> str | None:
+    marker_index = text.rfind('"input_i"')
+    if marker_index == -1:
+        return None
+    start_index = text.rfind("{", 0, marker_index)
+    end_index = text.find("}", marker_index)
+    if start_index == -1 or end_index == -1:
+        return None
+    return text[start_index : end_index + 1]
+
+
+def _extract_loudnorm_values(payload: dict[str, object]) -> _LoudnormValueResult:
+    values: dict[str, float] = {}
+    for key in _LOUDNORM_REQUIRED_KEYS:
+        if key not in payload:
+            return _LoudnormValueResult(error=f"Missing loudnorm field: {key}")
+        try:
+            values[key] = float(str(payload[key]).strip())
+        except (TypeError, ValueError):
+            return _LoudnormValueResult(error=f"Loudnorm field is not numeric: {key}")
+    return _LoudnormValueResult(
+        input_i=values["input_i"],
+        input_tp=values["input_tp"],
+        input_lra=values["input_lra"],
+        input_thresh=values["input_thresh"],
+        target_offset=values["target_offset"],
+    )
 
 
 def _status_for_validation_errors(errors: list[str], target_format: str) -> str:

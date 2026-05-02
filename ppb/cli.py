@@ -94,6 +94,33 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help="Leaf filename for the generated M3U8 playlist. Default: playlist.m3u8.",
     )
+    parser.add_argument(
+        "--ffmpeg",
+        metavar="FILE",
+        help=(
+            "Path to ffmpeg for the upcoming conversion stage. "
+            "Parsed only; conversion is not integrated yet."
+        ),
+    )
+    parser.add_argument(
+        "--mp3-quality",
+        type=int,
+        choices=range(10),
+        default=2,
+        metavar="0-9",
+        help=(
+            "MP3 VBR quality for the upcoming conversion stage. "
+            "Default: 2. Parsed only for now."
+        ),
+    )
+    parser.add_argument(
+        "--audio-bitrate",
+        metavar="BITRATE",
+        help=(
+            "Audio bitrate such as 192k for the upcoming conversion stage. "
+            "Parsed only for now."
+        ),
+    )
     return parser
 
 

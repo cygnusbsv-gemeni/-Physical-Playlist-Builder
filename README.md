@@ -6,7 +6,7 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: input reading, validation, normalization, dry-run operation planning, safe output-folder creation, copying source-compatible tracks into the export folder, generating `playlist.m3u8` from successfully copied files only, and writing user-facing reports/logs. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. It does not convert, normalize, or write tags.
+Current stage: input reading, validation, normalization, dry-run operation planning, safe output-folder creation, copying source-compatible tracks into the export folder, generating `playlist.m3u8` from successfully copied files only, writing user-facing reports/logs, and providing an isolated ffmpeg utility layer for a later conversion stage. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. It does not integrate conversion into the main workflow yet, and it does not normalize or write tags.
 
 ## Supported Input Types
 
@@ -110,6 +110,9 @@ Arguments:
 | `--strict` | No | Fail with exit code 3 when any tracks are blocked. |
 | `--report` | No | With `--dry-run`, write a JSON operation report. Passing no value writes `dry_run_report.json`. |
 | `--m3u-name` | No | Safe leaf filename for the generated M3U8 file. Default: `playlist.m3u8`. Absolute paths, separators, traversal, and empty names are rejected. |
+| `--ffmpeg` | No | Path to an ffmpeg executable for the upcoming conversion stage. Parsed by the CLI, but not used by the main export workflow yet. |
+| `--mp3-quality` | No | MP3 VBR quality value from `0` to `9` for the upcoming conversion stage. Default: `2`. Parsed only in this stage. |
+| `--audio-bitrate` | No | Audio bitrate such as `192k` for the upcoming conversion stage. Parsed only in this stage. |
 
 Input type detection defaults to file extension. `.json` is treated as canonical `physical_playlist_job.v1` JSON, `.txt` as a plain path list, `.csv` as tabular input, and `.m3u` / `.m3u8` as playlist files.
 
@@ -213,6 +216,21 @@ At the end of a real run, the CLI prints a final summary containing the final ou
 
 Dry-run mode does not create `export_report.txt` or `export.log`. `--report` remains a dry-run JSON report feature.
 
+## FFmpeg Utility Layer
+
+B9.1 adds `ppb/ffmpeg_tools.py`, a reusable low-level helper module for a later conversion stage. It can:
+
+- resolve ffmpeg from `PATH` or from an explicit executable path;
+- validate the executable by running `ffmpeg -version`;
+- convert one source file into one destination file inside an explicitly provided output folder;
+- avoid overwriting destinations unless `overwrite=True`;
+- create destination parent folders only inside the output folder boundary;
+- capture ffmpeg return code, stdout, stderr, and a stderr summary.
+
+Supported helper-level target formats are `mp3`, `flac`, `wav`, `m4a`, and `aac`. MP3 uses `libmp3lame` with default VBR quality `2`; `m4a` and `aac` use ffmpeg's native `aac` encoder when available in the local ffmpeg build. Sample rate is preserved by default because the helper does not pass `-ar`.
+
+This layer is not integrated into the main CLI processing flow yet. Planned `convert` tracks are still reported as `not_implemented`, and generated `playlist.m3u8` files still include only files that were actually created successfully by the current copy stage.
+
 Example generated files after a real run:
 
 ```text
@@ -285,14 +303,22 @@ pip install -r requirements.txt
 pytest tests/
 ```
 
+Focused B9.1 checks:
+
+```bash
+python -m ppb.cli --help
+python -m py_compile ppb\cli.py ppb\ffmpeg_tools.py
+```
+
 ## Current Limitations
 
 - TXT, CSV, M3U, and M3U8 inputs carry less metadata than canonical JSON.
 - Only planned `copy` operations are executed.
-- Conversion, loudness normalization, and tag writing are not implemented yet.
+- Conversion is available only as an isolated helper in `ppb/ffmpeg_tools.py`; it is not integrated into the main CLI workflow yet.
+- Loudness normalization and tag writing are not implemented yet.
 - `playlist.m3u8` includes only successfully copied files from the current run; planned conversions remain excluded as `not_implemented`.
 - `export.log` is created only for real runs after the final output folder is ready.
 
 ## Next Stage
 
-Next stage is not implemented yet. A logical next step after B8 is conversion/export handling for planned `convert` operations while keeping M3U8 generation limited to actually created output files.
+Next stage is not implemented yet. A logical next step after B9.1 is B9.2 conversion/export handling for planned `convert` operations while keeping M3U8 generation limited to actually created output files.

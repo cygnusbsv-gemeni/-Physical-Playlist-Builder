@@ -1,9 +1,9 @@
 """Physical Playlist Builder CLI.
 
 This stage validates neutral playlist input, prints a dry-run operation plan,
-creates a safe output folder, copies planned source files into it, and then
-generates an M3U8 playlist from successfully copied files. It does not convert,
-normalize, or write tags.
+creates a safe output folder, copies or converts planned source files into it,
+and then generates an M3U8 playlist from successfully exported files. It does
+not normalize or write tags.
 """
 
 from __future__ import annotations
@@ -13,7 +13,14 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ppb.copier import EXPORT_REPORT_FILENAME, CopyTrackResult, run_copy_stage
+from ppb.copier import (
+    EXPORT_REPORT_FILENAME,
+    STATUS_CONVERTED,
+    STATUS_COPIED,
+    STATUS_FFMPEG_MISSING,
+    CopyTrackResult,
+    run_copy_stage,
+)
 from ppb.filesystem import OutputFolderError, build_output_folder_target, create_output_folder
 from ppb.input_readers import AUTO_INPUT_TYPE, InputReadError, read_playlist_input
 from ppb.logging_setup import close_export_logger, setup_export_logger
@@ -98,8 +105,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--ffmpeg",
         metavar="FILE",
         help=(
-            "Path to ffmpeg for the upcoming conversion stage. "
-            "Parsed only; conversion is not integrated yet."
+            "Path to ffmpeg for planned convert operations. "
+            "Defaults to ffmpeg discovered on PATH."
         ),
     )
     parser.add_argument(
@@ -109,16 +116,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=2,
         metavar="0-9",
         help=(
-            "MP3 VBR quality for the upcoming conversion stage. "
-            "Default: 2. Parsed only for now."
+            "MP3 VBR quality for planned MP3 conversion. Default: 2."
         ),
     )
     parser.add_argument(
         "--audio-bitrate",
         metavar="BITRATE",
         help=(
-            "Audio bitrate such as 192k for the upcoming conversion stage. "
-            "Parsed only for now."
+            "Audio bitrate such as 192k for planned conversion."
         ),
     )
     return parser
@@ -154,8 +159,8 @@ def print_job_summary(input_result, out_dir: Path, dry_run: bool, create_subfold
         + (
             "YES - no files will be created"
             if dry_run
-            else "NO - output folder, export_session.json, copies, playlist.m3u8, "
-            "export_report.json, export_report.txt, and export.log may be created"
+            else "NO - output folder, export_session.json, copies, conversions, "
+            "playlist.m3u8, export_report.json, export_report.txt, and export.log may be created"
         )
     )
     print(
@@ -263,20 +268,21 @@ def print_dry_run_plan(plan) -> None:
 
 def print_copy_progress(index: int, total: int, result: CopyTrackResult) -> None:
     filename = result.expected_output_filename or Path(result.source_path).name or "(no filename)"
-    print(f"[copy] {index}/{total} {result.status}: {filename}")
+    print(f"[export] {index}/{total} {result.status}: {filename}")
 
 
 def print_copy_summary(copy_result) -> None:
     summary = copy_result.summary
     print("=" * 52)
-    print("  Copy Stage Summary")
+    print("  Export Stage Summary")
     print("=" * 52)
     print(f"  Tracks processed: {summary['total']}")
     print(f"  Copied: {summary['copied']}")
+    print(f"  Converted: {summary['converted']}")
     print(f"  Skipped: {summary['skipped']}")
     print(f"  Source missing: {summary['source_missing']}")
     print(f"  Destination exists: {summary['destination_exists']}")
-    print(f"  Not implemented: {summary['not_implemented']}")
+    print(f"  FFmpeg missing: {summary['ffmpeg_missing']}")
     print(f"  Failed: {summary['failed']}")
     print("=" * 52)
 
@@ -296,11 +302,12 @@ def print_final_export_summary(
     print("=" * 52)
     print(f"  Final output folder: {final_output_dir}")
     print(f"  Copied: {summary['copied']}")
+    print(f"  Converted: {summary['converted']}")
     print(f"  Skipped: {summary['skipped']}")
     print(f"  Failed: {summary['failed']}")
     print(f"  Missing: {summary['source_missing']}")
     print(f"  Conflict: {summary['destination_exists']}")
-    print(f"  Not implemented: {summary['not_implemented']}")
+    print(f"  FFmpeg missing: {summary['ffmpeg_missing']}")
     print(f"  M3U8 status: {m3u_result.status}")
     print(f"  M3U8 path: {m3u_result.m3u_path or '(none)'}")
     print(f"  export_report.json: {report_path}")
@@ -321,10 +328,27 @@ def log_validation_details(logger, validation_result) -> None:
 
 def log_copy_details(logger, copy_result) -> None:
     for result in copy_result.results:
+        if result.status == STATUS_COPIED:
+            logger.info("track %s copied: %s", result.position, result.destination_path)
+        elif result.status == STATUS_CONVERTED:
+            logger.info(
+                "track %s converted to %s: %s",
+                result.position,
+                result.target_format or "(unknown)",
+                result.destination_path,
+            )
+        elif result.status == STATUS_FFMPEG_MISSING:
+            logger.error("track %s ffmpeg missing: %s", result.position, result.destination_path)
         for warning in result.warnings:
             logger.warning("track %s warning: %s", result.position, warning)
         for error in result.errors:
             logger.error("track %s error: %s", result.position, error)
+        if result.ffmpeg_stderr_summary:
+            logger.error(
+                "track %s ffmpeg stderr summary: %s",
+                result.position,
+                result.ffmpeg_stderr_summary,
+            )
 
 
 def log_m3u_details(logger, m3u_result) -> None:
@@ -424,9 +448,13 @@ def main(argv: list[str] | None = None) -> None:
             plan=plan,
             final_output_dir=output_result.final_output_dir,
             overwrite=args.overwrite,
+            ffmpeg_path=args.ffmpeg,
+            mp3_quality=args.mp3_quality,
+            audio_bitrate=args.audio_bitrate,
+            target_format=result.job.settings.output_format,
             progress_callback=print_copy_progress,
         )
-        logger.info("copy stage completed: %s", copy_result.summary)
+        logger.info("export stage completed: %s", copy_result.summary)
         log_copy_details(logger, copy_result)
         report_path = Path(output_result.final_output_dir) / EXPORT_REPORT_FILENAME
         report_txt_path = Path(output_result.final_output_dir) / EXPORT_REPORT_TEXT_FILENAME

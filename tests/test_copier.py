@@ -11,7 +11,8 @@ from ppb.copier import (
     EXPORT_REPORT_FILENAME,
     STATUS_COPIED,
     STATUS_DESTINATION_EXISTS,
-    STATUS_NOT_IMPLEMENTED,
+    STATUS_FAILED,
+    STATUS_FFMPEG_MISSING,
     STATUS_SKIPPED,
     STATUS_SOURCE_MISSING,
     run_copy_stage,
@@ -132,7 +133,7 @@ def test_copy_stage_reports_missing_blocked_and_convert_without_outputs(tmp_path
     statuses = {track.position: track.status for track in result.results}
     assert statuses[1] == STATUS_SOURCE_MISSING
     assert statuses[2] == STATUS_SKIPPED
-    assert statuses[3] == STATUS_NOT_IMPLEMENTED
+    assert statuses[3] in {STATUS_FAILED, STATUS_FFMPEG_MISSING}
     assert not (output_dir / "missing.mp3").exists()
     assert not (output_dir / "blocked.mp3").exists()
     assert not (output_dir / "convert.mp3").exists()

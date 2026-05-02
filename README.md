@@ -6,7 +6,7 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: input reading, validation, normalization, dry-run operation planning, safe output-folder creation, copying source-compatible tracks into the export folder, generating `playlist.m3u8` from successfully copied files only, writing user-facing reports/logs, and providing an isolated ffmpeg utility layer for a later conversion stage. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. It does not integrate conversion into the main workflow yet, and it does not normalize or write tags.
+Current stage: B9.3 focused conversion tests and hardening. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. It does not normalize loudness, write tags, resume interrupted exports, or bundle ffmpeg.
 
 ## Supported Input Types
 
@@ -92,6 +92,7 @@ python -m ppb.cli --input tracks.csv --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input playlist.m3u8 --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --dry-run --report
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut
+python -m ppb.cli --input playlist_job_mp3.json --out D:\PlaylistOut --ffmpeg C:\Tools\ffmpeg\bin\ffmpeg.exe
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --m3u-name road-trip.m3u8
 python -m ppb.cli --input DOC\examples\playlist_job.v1.canonical.json --out .\out
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --no-create-subfolder
@@ -110,9 +111,9 @@ Arguments:
 | `--strict` | No | Fail with exit code 3 when any tracks are blocked. |
 | `--report` | No | With `--dry-run`, write a JSON operation report. Passing no value writes `dry_run_report.json`. |
 | `--m3u-name` | No | Safe leaf filename for the generated M3U8 file. Default: `playlist.m3u8`. Absolute paths, separators, traversal, and empty names are rejected. |
-| `--ffmpeg` | No | Path to an ffmpeg executable for the upcoming conversion stage. Parsed by the CLI, but not used by the main export workflow yet. |
-| `--mp3-quality` | No | MP3 VBR quality value from `0` to `9` for the upcoming conversion stage. Default: `2`. Parsed only in this stage. |
-| `--audio-bitrate` | No | Audio bitrate such as `192k` for the upcoming conversion stage. Parsed only in this stage. |
+| `--ffmpeg` | No | Path to an ffmpeg executable for planned `convert` operations. If omitted, `ffmpeg` is resolved from `PATH`. |
+| `--mp3-quality` | No | MP3 VBR quality value from `0` to `9` for planned MP3 conversion. Default: `2`. Ignored for non-MP3 formats. |
+| `--audio-bitrate` | No | Audio bitrate such as `192k` for planned conversion. Used for MP3/AAC-style encoders when provided. |
 
 Input type detection defaults to file extension. `.json` is treated as canonical `physical_playlist_job.v1` JSON, `.txt` as a plain path list, `.csv` as tabular input, and `.m3u` / `.m3u8` as playlist files.
 
@@ -158,9 +159,9 @@ Then dry-run prints an operation plan with:
 
 When `--report` is passed, the same plan is written as JSON. No music files or output folders are created.
 
-## Output Folder Creation, Copy, M3U8, Reporting, And Logging Stage
+## Output Folder Creation, Copy, Conversion, M3U8, Reporting, And Logging Stage
 
-Run without `--dry-run` to create the safe physical output folder and execute the first real copy stage:
+Run without `--dry-run` to create the safe physical output folder and execute the real export stage:
 
 ```bash
 python -m ppb.cli --input playlist_job.json --out ./out
@@ -176,20 +177,23 @@ The playlist name is sanitized for Windows filenames before the folder is create
 
 The output stage writes `export_session.json` into the final folder. This file records the final output path, the validated job, the dry-run plan, and a handoff field named `handoff.final_output_dir`.
 
-After the folder is ready, the copy stage copies only tracks whose planned action is `copy`. Blocked tracks are skipped, missing sources are reported as `source_missing`, and planned conversions are reported as `not_implemented` because conversion is not part of this stage. Existing destination files are not overwritten unless `--overwrite` is passed. Each copied file is size-checked after copy.
+After the folder is ready, the export stage copies tracks whose planned action is `copy` and converts tracks whose planned action is `convert`. Conversion uses `ppb/ffmpeg_tools.py` and writes only destination files inside the final output folder. Blocked tracks are skipped, missing sources are reported as `source_missing`, and existing destination files are reported as `destination_exists` unless `--overwrite` is passed. Each copied file is size-checked after copy. Converted files are verified by the ffmpeg helper by checking that the destination file was created.
+
+When planned convert tracks exist, ffmpeg is resolved from `--ffmpeg` or from `PATH`. If ffmpeg is missing or not runnable, copy-only tracks still proceed, convert tracks are reported as `ffmpeg_missing`, and the error is written to `export_report.json`, `export_report.txt`, and `export.log`.
 
 Then the tool evaluates `settings.generate_m3u8` from the normalized job. If the setting is `true` or missing, the CLI generates a UTF-8 `playlist.m3u8` (or the filename passed via `--m3u-name`) inside the same final output folder. If the setting is `false`, M3U8 generation is skipped and the skip is recorded in `export_report.json`.
 
-The generated playlist always starts with `#EXTM3U`, uses relative paths from the M3U8 file location to exported files, preserves playlist order, and includes only tracks whose output file was actually created successfully in this run. When metadata is available, the tool writes `#EXTINF:<duration>,<artist> - <title>` lines. If no tracks were copied successfully, the tool still writes a valid empty playlist containing only `#EXTM3U`.
+The generated playlist always starts with `#EXTM3U`, uses relative paths from the M3U8 file location to exported files, preserves playlist order, and includes only tracks whose output file was actually created successfully in this run. Successfully copied and successfully converted tracks are included. Failed, skipped, missing, conflicted, and `ffmpeg_missing` tracks are excluded. When metadata is available, the tool writes `#EXTINF:<duration>,<artist> - <title>` lines. If no tracks were exported successfully, the tool still writes a valid empty playlist containing only `#EXTM3U`.
 
 The stage writes `export_report.json` into the final folder with one result per track. Result statuses include:
 
 - `copied`
+- `converted`
 - `skipped`
 - `failed`
 - `source_missing`
 - `destination_exists`
-- `not_implemented`
+- `ffmpeg_missing`
 
 The same `export_report.json` also records:
 
@@ -208,17 +212,17 @@ The same `export_report.json` also records:
 - `report_txt_path`
 - `log_path`
 
-The stage also writes `export_report.txt`, a human-readable report for the completed run. It summarizes the playlist name, input path, final output folder, copied/skipped/failed/source-missing/destination-conflict/not-implemented totals, M3U8 status and path, failed or missing tracks, destination conflicts, not-yet-implemented convert tracks, and generated files.
+The stage also writes `export_report.txt`, a human-readable report for the completed run. It summarizes the playlist name, input path, final output folder, copied/converted/skipped/failed/source-missing/destination-conflict/ffmpeg-missing totals, M3U8 status and path, failed or missing tracks, destination conflicts, and generated files.
 
-The stage writes `export.log` using only Python standard library logging. The log records the main real-run milestones: validation completed, output folder created, copy stage completed, M3U8 generated or skipped, reports written, plus warnings and errors when available.
+The stage writes `export.log` using only Python standard library logging. The log records the main real-run milestones: validation completed, output folder created, export stage completed, conversions or copy operations, M3U8 generated or skipped, reports written, plus warnings and errors when available.
 
-At the end of a real run, the CLI prints a final summary containing the final output folder, copied/skipped/failed/missing/conflict/not-implemented counts, M3U8 status/path, `export_report.json`, `export_report.txt`, and `export.log`.
+At the end of a real run, the CLI prints a final summary containing the final output folder, copied/converted/skipped/failed/missing/conflict/ffmpeg-missing counts, M3U8 status/path, `export_report.json`, `export_report.txt`, and `export.log`.
 
 Dry-run mode does not create `export_report.txt` or `export.log`. `--report` remains a dry-run JSON report feature.
 
-## FFmpeg Utility Layer
+## FFmpeg Conversion
 
-B9.1 adds `ppb/ffmpeg_tools.py`, a reusable low-level helper module for a later conversion stage. It can:
+`ppb/ffmpeg_tools.py` is the reusable low-level helper used by the main export workflow for planned `convert` tracks. It can:
 
 - resolve ffmpeg from `PATH` or from an explicit executable path;
 - validate the executable by running `ffmpeg -version`;
@@ -229,7 +233,7 @@ B9.1 adds `ppb/ffmpeg_tools.py`, a reusable low-level helper module for a later 
 
 Supported helper-level target formats are `mp3`, `flac`, `wav`, `m4a`, and `aac`. MP3 uses `libmp3lame` with default VBR quality `2`; `m4a` and `aac` use ffmpeg's native `aac` encoder when available in the local ffmpeg build. Sample rate is preserved by default because the helper does not pass `-ar`.
 
-This layer is not integrated into the main CLI processing flow yet. Planned `convert` tracks are still reported as `not_implemented`, and generated `playlist.m3u8` files still include only files that were actually created successfully by the current copy stage.
+In the main CLI workflow, planned `convert` tracks use the normalized job target format, normally `settings.output_format`, and the planned output filename from the dry-run plan. Successful conversions are reported as `converted` and are included in `playlist.m3u8`. Failed conversions are reported as `failed`, `source_missing`, `destination_exists`, or `ffmpeg_missing` and are excluded from `playlist.m3u8`. If ffmpeg creates a partial destination file for a failed conversion and that destination did not exist before the run, the helper removes that partial file inside the output folder. The per-track JSON result records the target format, ffmpeg return code when available, and an ffmpeg stderr summary when conversion fails.
 
 Example generated files after a real run:
 
@@ -271,7 +275,8 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 
 - Source audio files are never modified.
 - Dry-run checks whether source files exist before any real output stage.
-- The copy/M3U8/report/log stage reads source files and writes only destination copies plus generated report/log/playlist files in the selected output folder.
+- The copy/conversion/M3U8/report/log stage reads source files and writes only exported audio files plus generated report/log/playlist files in the selected output folder.
+- ffmpeg conversion receives source files only as inputs and writes destination files only inside the selected final output folder.
 - Tags, if implemented later, are written only to exported copies.
 - Loudness processing, if implemented later, applies only to exported copies.
 - All outputs must stay inside the selected output folder.
@@ -303,22 +308,28 @@ pip install -r requirements.txt
 pytest tests/
 ```
 
-Focused B9.1 checks:
+Focused B9.3 checks:
 
 ```bash
 python -m ppb.cli --help
-python -m py_compile ppb\cli.py ppb\ffmpeg_tools.py
+python -m py_compile ppb\cli.py ppb\copier.py ppb\report.py ppb\m3u.py ppb\ffmpeg_tools.py
+python -m pytest tests\test_ffmpeg_conversion.py -vv --tb=short --basetemp C:\Temp\project_pytest\b9_3 -p no:cacheprovider
+python -m pytest tests\test_copier.py tests\test_cli_u1.py -q --basetemp C:\Temp\project_pytest\b9_3_regression -p no:cacheprovider
 ```
+
+If `C:\Temp` is not writable in the local environment, use another explicit pytest temp directory outside the repository when possible. The focused conversion tests generate synthetic WAV fixtures with Python standard library `wave`; they do not use real user music files. Tests that require real WAV to MP3 conversion skip cleanly when ffmpeg is not available.
 
 ## Current Limitations
 
 - TXT, CSV, M3U, and M3U8 inputs carry less metadata than canonical JSON.
-- Only planned `copy` operations are executed.
-- Conversion is available only as an isolated helper in `ppb/ffmpeg_tools.py`; it is not integrated into the main CLI workflow yet.
+- ffmpeg must be installed on `PATH` or passed with `--ffmpeg` for planned `convert` tracks to succeed.
+- If ffmpeg is missing, planned `convert` tracks are marked `ffmpeg_missing`; copy-only tracks can still complete.
 - Loudness normalization and tag writing are not implemented yet.
-- `playlist.m3u8` includes only successfully copied files from the current run; planned conversions remain excluded as `not_implemented`.
+- Resume of interrupted exports is not implemented yet.
+- `playlist.m3u8` includes only successfully copied or converted files from the current run.
+- Failed conversion partial files are removed only when the destination did not exist before the failed ffmpeg run.
 - `export.log` is created only for real runs after the final output folder is ready.
 
 ## Next Stage
 
-Next stage is not implemented yet. A logical next step after B9.1 is B9.2 conversion/export handling for planned `convert` operations while keeping M3U8 generation limited to actually created output files.
+Next stage is not implemented yet. A logical next step after B9.3 is a focused B10/B11/B12 stage for one new capability, such as loudness processing on exported copies, tag writing on exported copies, or resume metadata. None of those are implemented in B9.3.

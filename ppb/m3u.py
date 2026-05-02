@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 
 from ppb.contract import PlaylistJob, TrackEntry
-from ppb.copier import CopyStageResult, STATUS_COPIED
+from ppb.copier import CopyStageResult, STATUS_CONVERTED, STATUS_COPIED
 
 
 DEFAULT_M3U_FILENAME = "playlist.m3u8"
@@ -67,7 +67,7 @@ def generate_m3u8_playlist(
     final_output_dir: Path | str,
     m3u_name: str = DEFAULT_M3U_FILENAME,
 ) -> M3UGenerationResult:
-    """Generate ``playlist.m3u8`` from successfully copied output files only."""
+    """Generate ``playlist.m3u8`` from successfully copied or converted files."""
 
     safe_m3u_name = validate_m3u_filename(m3u_name)
     if not job.settings.generate_m3u8:
@@ -85,13 +85,13 @@ def generate_m3u8_playlist(
     track_count = 0
 
     for track, result in zip(job.tracks, copy_result.results):
-        if result.status != STATUS_COPIED or not result.destination_path:
+        if result.status not in {STATUS_COPIED, STATUS_CONVERTED} or not result.destination_path:
             continue
 
         destination_path = Path(result.destination_path).resolve(strict=False)
         if not destination_path.is_file():
             warnings.append(
-                "Copied track is missing on disk during M3U8 generation: "
+                "Exported track is missing on disk during M3U8 generation: "
                 f"{destination_path}"
             )
             continue

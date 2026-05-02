@@ -225,6 +225,7 @@ def convert_audio_file(
         overwrite=overwrite,
     )
 
+    destination_existed_before = destination.exists()
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -282,6 +283,10 @@ def convert_audio_file(
     stdout = completed.stdout or ""
     stderr = completed.stderr or ""
     if completed.returncode != 0:
+        warnings = _remove_partial_destination(
+            destination,
+            destination_existed_before=destination_existed_before,
+        )
         return FfmpegConversionResult(
             ok=False,
             status=STATUS_FAILED,
@@ -295,6 +300,7 @@ def convert_audio_file(
             stdout=stdout,
             stderr=stderr,
             stderr_summary=_summarize_stderr(stderr),
+            warnings=warnings,
             errors=[f"ffmpeg conversion failed with exit code {completed.returncode}."],
         )
 
@@ -530,6 +536,16 @@ def _summarize_stderr(stderr: str, *, max_lines: int = 20) -> str:
     if len(lines) <= max_lines:
         return "\n".join(lines)
     return "\n".join(lines[-max_lines:])
+
+
+def _remove_partial_destination(destination: Path, *, destination_existed_before: bool) -> list[str]:
+    if destination_existed_before or not destination.is_file():
+        return []
+    try:
+        destination.unlink()
+    except OSError as exc:
+        return [f"Could not remove partial failed conversion output: {exc}"]
+    return []
 
 
 def _first_nonempty_line(value: str) -> str | None:

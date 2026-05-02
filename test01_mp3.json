@@ -55,9 +55,9 @@
       "codec": "FLAC",
       "date": "2024-10-18",
       "duration_sec": 272.64,
-      "filename_hint": "01 - Alexandre Tharaud - Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).flac",
+      "filename_hint": "01 - Alexandre Tharaud - Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).mp3",
       "genre": "Classique",
-      "output_filename": "01 - Alexandre Tharaud - Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).flac",
+      "output_filename": "01 - Alexandre Tharaud - Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).mp3",
       "position": 1,
       "producer_meta": {
         "audio_action": "convert",
@@ -71,7 +71,6 @@
         "tag_mode": "normalize",
         "target_ext": ".mp3"
       },
-      
       "sample_rate_hz": 96000,
       "source_path": "D:\\Music\\000_Избранное наборы\\Source\\Мать\\Alexandre Tharaud - Bach (2024) [24-96]\\25. Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).flac",
       "source_status": "active",
@@ -486,9 +485,9 @@
       "codec": "FLAC",
       "date": "2011",
       "duration_sec": 257.022,
-      "filename_hint": "11 - The White Stripes - Seven Nation Army (The Glitch Mob Remix).flac",
+      "filename_hint": "11 - The White Stripes - Seven Nation Army (The Glitch Mob Remix).mp3",
       "genre": "Electronic",
-      "output_filename": "11 - The White Stripes - Seven Nation Army (The Glitch Mob Remix).flac",
+      "output_filename": "11 - The White Stripes - Seven Nation Army (The Glitch Mob Remix).mp3",
       "position": 11,
       "producer_meta": {
         "audio_action": "convert",

@@ -1,4 +1,4 @@
-"""Reporting helpers for dry-run plans, export sessions, and copy results."""
+"""Reporting helpers for dry-run plans, export sessions, and export results."""
 
 from __future__ import annotations
 
@@ -10,8 +10,10 @@ from typing import Any
 
 from ppb.contract import PlaylistJob
 from ppb.copier import (
+    STATUS_CONVERTED,
     STATUS_DESTINATION_EXISTS,
     STATUS_FAILED,
+    STATUS_FFMPEG_MISSING,
     STATUS_NOT_IMPLEMENTED,
     STATUS_SOURCE_MISSING,
     CopyStageResult,
@@ -83,6 +85,7 @@ def export_session_to_dict(
             "final_output_dir": plan.output_dir,
             "safe_operation_count": len(plan.safe_operations),
             "audio_files_copied": False,
+            "audio_files_exported": False,
         },
         "job": asdict(job),
         "dry_run_plan": dry_run_plan_to_dict(plan),
@@ -135,7 +138,7 @@ def export_report_to_dict(
     log_path: Path | str | None = None,
     session_id: str | None = None,
 ) -> dict[str, Any]:
-    """Return the JSON payload for the real copy-stage report."""
+    """Return the JSON payload for the real export-stage report."""
 
     report_finished_at = finished_at or datetime.now(timezone.utc).isoformat()
     output_dir = str(final_output_dir) if final_output_dir is not None else copy_result.output_dir
@@ -183,7 +186,7 @@ def write_export_report(
     log_path: Path | str | None = None,
     session_id: str | None = None,
 ) -> Path:
-    """Write ``export_report.json`` with per-track copy-stage results."""
+    """Write ``export_report.json`` with per-track export-stage results."""
 
     path = Path(report_path)
     path.write_text(
@@ -234,11 +237,12 @@ def write_export_report_text(
         "Totals",
         "-" * 40,
         f"Copied: {summary.get('copied', 0)}",
+        f"Converted: {summary.get('converted', 0)}",
         f"Skipped: {summary.get('skipped', 0)}",
         f"Failed: {summary.get('failed', 0)}",
         f"Source missing: {summary.get('source_missing', 0)}",
         f"Destination exists: {summary.get('destination_exists', 0)}",
-        f"Not implemented: {summary.get('not_implemented', 0)}",
+        f"FFmpeg missing: {summary.get('ffmpeg_missing', 0)}",
         "",
         "M3U8",
         "-" * 40,
@@ -252,7 +256,7 @@ def write_export_report_text(
         lines,
         "Failed or Missing Tracks",
         copy_result.results,
-        {STATUS_FAILED, STATUS_SOURCE_MISSING},
+        {STATUS_FAILED, STATUS_SOURCE_MISSING, STATUS_FFMPEG_MISSING},
     )
     _append_track_section(
         lines,
@@ -260,12 +264,13 @@ def write_export_report_text(
         copy_result.results,
         {STATUS_DESTINATION_EXISTS},
     )
-    _append_track_section(
-        lines,
-        "Not Implemented Convert Tracks",
-        copy_result.results,
-        {STATUS_NOT_IMPLEMENTED},
-    )
+    if summary.get(STATUS_NOT_IMPLEMENTED, 0):
+        _append_track_section(
+            lines,
+            "Not Implemented Tracks",
+            copy_result.results,
+            {STATUS_NOT_IMPLEMENTED},
+        )
 
     lines.extend(
         [
@@ -296,12 +301,15 @@ def update_export_session_copy_summary(
     copy_result: CopyStageResult,
     report_path: Path | str,
 ) -> Path:
-    """Update ``export_session.json`` with the completed copy-stage handoff."""
+    """Update ``export_session.json`` with the completed export-stage handoff."""
 
     path = Path(session_path)
     data = json.loads(path.read_text(encoding="utf-8"))
     handoff = data.setdefault("handoff", {})
     handoff["audio_files_copied"] = copy_result.summary["copied"] > 0
+    handoff["audio_files_exported"] = (
+        copy_result.summary["copied"] + copy_result.summary[STATUS_CONVERTED] > 0
+    )
     handoff["copy_report_path"] = str(report_path)
     handoff["copy_summary"] = copy_result.summary
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -356,6 +364,10 @@ def _append_track_section(
             lines.append(f"  error: {error}")
         for warning in result.warnings:
             lines.append(f"  warning: {warning}")
+        if result.ffmpeg_stderr_summary:
+            lines.append("  ffmpeg stderr summary:")
+            for line in result.ffmpeg_stderr_summary.splitlines():
+                lines.append(f"    {line}")
     lines.append("")
 
 

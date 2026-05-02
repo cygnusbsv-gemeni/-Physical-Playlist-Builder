@@ -6,7 +6,7 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: input reading, validation, normalization, dry-run operation planning, and safe output-folder creation. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, and can create the physical output folder plus `export_session.json`. It does not copy, convert, normalize, tag, or create M3U8 files yet.
+Current stage: input reading, validation, normalization, dry-run operation planning, safe output-folder creation, copying source-compatible tracks into the export folder, and generating `playlist.m3u8` from successfully copied files only. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, generates a UTF-8 `playlist.m3u8`, and writes `export_report.json` with both copy and M3U8 metadata. It does not convert, normalize, or write tags.
 
 ## Supported Input Types
 
@@ -92,6 +92,8 @@ python -m ppb.cli --input tracks.csv --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input playlist.m3u8 --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --dry-run --report
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut
+python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --m3u-name road-trip.m3u8
+python -m ppb.cli --input DOC\examples\playlist_job.v1.canonical.json --out .\out
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --no-create-subfolder
 ```
 
@@ -107,6 +109,7 @@ Arguments:
 | `--dry-run` | No | Validate and summarize without creating or modifying files. |
 | `--strict` | No | Fail with exit code 3 when any tracks are blocked. |
 | `--report` | No | With `--dry-run`, write a JSON operation report. Passing no value writes `dry_run_report.json`. |
+| `--m3u-name` | No | Safe leaf filename for the generated M3U8 file. Default: `playlist.m3u8`. Absolute paths, separators, traversal, and empty names are rejected. |
 
 Input type detection defaults to file extension. `.json` is treated as canonical `physical_playlist_job.v1` JSON, `.txt` as a plain path list, `.csv` as tabular input, and `.m3u` / `.m3u8` as playlist files.
 
@@ -152,9 +155,9 @@ Then dry-run prints an operation plan with:
 
 When `--report` is passed, the same plan is written as JSON. No music files or output folders are created.
 
-## Output Folder Creation
+## Output Folder Creation, Copy, And M3U8 Stage
 
-Run without `--dry-run` to create only the safe physical output folder:
+Run without `--dry-run` to create the safe physical output folder and execute the first real copy stage:
 
 ```bash
 python -m ppb.cli --input playlist_job.json --out ./out
@@ -168,7 +171,29 @@ By default the final output folder is a timestamped subfolder:
 
 The playlist name is sanitized for Windows filenames before the folder is created. Pass `--no-create-subfolder` to use `--out` as the exact final output folder.
 
-The output stage writes `export_session.json` into the final folder. This file records the final output path, the validated job, the dry-run plan, and a handoff field named `handoff.final_output_dir` for the later copy stage. No audio files are copied yet.
+The output stage writes `export_session.json` into the final folder. This file records the final output path, the validated job, the dry-run plan, and a handoff field named `handoff.final_output_dir`.
+
+After the folder is ready, the copy stage copies only tracks whose planned action is `copy`. Blocked tracks are skipped, missing sources are reported as `source_missing`, and planned conversions are reported as `not_implemented` because conversion is not part of this stage. Existing destination files are not overwritten unless `--overwrite` is passed. Each copied file is size-checked after copy.
+
+Then the tool evaluates `settings.generate_m3u8` from the normalized job. If the setting is `true` or missing, the CLI generates a UTF-8 `playlist.m3u8` (or the filename passed via `--m3u-name`) inside the same final output folder. If the setting is `false`, M3U8 generation is skipped and the skip is recorded in `export_report.json`.
+
+The generated playlist always starts with `#EXTM3U`, uses relative paths from the M3U8 file location to exported files, preserves playlist order, and includes only tracks whose output file was actually created successfully in this run. When metadata is available, the tool writes `#EXTINF:<duration>,<artist> - <title>` lines. If no tracks were copied successfully, the tool still writes a valid empty playlist containing only `#EXTM3U`.
+
+The stage writes `export_report.json` into the final folder with one result per track. Result statuses include:
+
+- `copied`
+- `skipped`
+- `failed`
+- `source_missing`
+- `destination_exists`
+- `not_implemented`
+
+The same `export_report.json` also records:
+
+- `m3u_path`
+- `m3u_track_count`
+- `m3u_status`
+- `m3u_warnings` or `m3u_errors` when applicable
 
 ## Strict vs Non-Strict
 
@@ -200,6 +225,7 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 
 - Source audio files are never modified.
 - Dry-run checks whether source files exist before any real output stage.
+- The copy/M3U8 stage reads source files and writes only destination copies plus generated report/playlist files in the selected output folder.
 - Tags, if implemented later, are written only to exported copies.
 - Loudness processing, if implemented later, applies only to exported copies.
 - All outputs must stay inside the selected output folder.
@@ -207,6 +233,7 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 - Existing non-empty output folders are rejected unless `--overwrite` is passed.
 - Duplicate planned output filenames are reported as conflicts.
 - Output filenames must be safe leaf filenames, not absolute paths or paths with `..`.
+- `--m3u-name` must be a safe leaf filename, not an absolute path, nested path, or traversal path.
 - The output folder must not be the same as a source track directory.
 - The output folder must not be inside a source track directory.
 - The output path must not be empty or a filesystem root.
@@ -233,5 +260,10 @@ pytest tests/
 ## Current Limitations
 
 - TXT, CSV, M3U, and M3U8 inputs carry less metadata than canonical JSON.
-- Files are not copied, converted, normalized, tagged, or overwritten.
-- M3U8 generation is not implemented yet.
+- Only planned `copy` operations are executed.
+- Conversion, loudness normalization, and tag writing are not implemented yet.
+- `playlist.m3u8` includes only successfully copied files from the current run; planned conversions remain excluded as `not_implemented`.
+
+## Next Stage
+
+Next stage is not implemented yet. A logical next step after B7 is conversion/export handling for planned `convert` operations while keeping M3U8 generation limited to actually created output files.

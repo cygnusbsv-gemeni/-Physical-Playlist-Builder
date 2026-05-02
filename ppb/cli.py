@@ -1,8 +1,9 @@
 """Physical Playlist Builder CLI.
 
 This stage validates neutral playlist input, prints a dry-run operation plan,
-and can create a safe output folder with an export session handoff file. It
-does not copy, convert, normalize, tag, or create playlist files.
+creates a safe output folder, copies planned source files into it, and then
+generates an M3U8 playlist from successfully copied files. It does not convert,
+normalize, or write tags.
 """
 
 from __future__ import annotations
@@ -11,10 +12,18 @@ import argparse
 import sys
 from pathlib import Path
 
+from ppb.copier import EXPORT_REPORT_FILENAME, CopyTrackResult, run_copy_stage
 from ppb.filesystem import OutputFolderError, build_output_folder_target, create_output_folder
 from ppb.input_readers import AUTO_INPUT_TYPE, InputReadError, read_playlist_input
+from ppb.m3u import (
+    DEFAULT_M3U_FILENAME,
+    M3U_STATUS_FAILED,
+    M3U_STATUS_GENERATED,
+    generate_m3u8_playlist,
+    validate_m3u_filename,
+)
 from ppb.planner import ACTION_CONVERT, ACTION_COPY, ACTION_ERROR, build_dry_run_plan
-from ppb.report import write_dry_run_report
+from ppb.report import update_export_session_copy_summary, write_dry_run_report, write_export_report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -71,6 +80,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help="Write dry-run JSON report. Default when passed: dry_run_report.json.",
     )
+    parser.add_argument(
+        "--m3u-name",
+        default=DEFAULT_M3U_FILENAME,
+        metavar="FILE",
+        help="Leaf filename for the generated M3U8 playlist. Default: playlist.m3u8.",
+    )
     return parser
 
 
@@ -104,7 +119,8 @@ def print_job_summary(input_result, out_dir: Path, dry_run: bool, create_subfold
         + (
             "YES - no files will be created"
             if dry_run
-            else "NO - output folder and export_session.json may be created"
+            else "NO - output folder, export_session.json, copies, playlist.m3u8, "
+            "and export_report.json may be created"
         )
     )
     print(
@@ -210,11 +226,35 @@ def print_dry_run_plan(plan) -> None:
     print()
 
 
+def print_copy_progress(index: int, total: int, result: CopyTrackResult) -> None:
+    filename = result.expected_output_filename or Path(result.source_path).name or "(no filename)"
+    print(f"[copy] {index}/{total} {result.status}: {filename}")
+
+
+def print_copy_summary(copy_result) -> None:
+    summary = copy_result.summary
+    print("=" * 52)
+    print("  Copy Stage Summary")
+    print("=" * 52)
+    print(f"  Tracks processed: {summary['total']}")
+    print(f"  Copied: {summary['copied']}")
+    print(f"  Skipped: {summary['skipped']}")
+    print(f"  Source missing: {summary['source_missing']}")
+    print(f"  Destination exists: {summary['destination_exists']}")
+    print(f"  Not implemented: {summary['not_implemented']}")
+    print(f"  Failed: {summary['failed']}")
+    print("=" * 52)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.report and not args.dry_run:
         parser.error("--report requires --dry-run")
+    try:
+        m3u_name = validate_m3u_filename(args.m3u_name)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     try:
         input_result = read_playlist_input(
@@ -282,7 +322,43 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit(4)
         print(f"[output] Folder ready: {output_result.final_output_dir}")
         print(f"[output] Export session written: {output_result.export_session_path}")
-        print("[output] No audio files were copied.")
+        copy_result = run_copy_stage(
+            plan=plan,
+            final_output_dir=output_result.final_output_dir,
+            overwrite=args.overwrite,
+            progress_callback=print_copy_progress,
+        )
+        report_path = Path(output_result.final_output_dir) / EXPORT_REPORT_FILENAME
+        m3u_result = generate_m3u8_playlist(
+            job=result.job,
+            copy_result=copy_result,
+            final_output_dir=output_result.final_output_dir,
+            m3u_name=m3u_name,
+        )
+        try:
+            write_export_report(copy_result, report_path, m3u_result=m3u_result)
+            update_export_session_copy_summary(
+                session_path=output_result.export_session_path,
+                copy_result=copy_result,
+                report_path=report_path,
+            )
+        except OSError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(4)
+        print_copy_summary(copy_result)
+        if m3u_result.status == M3U_STATUS_GENERATED:
+            print(
+                f"[output] M3U8 written: {m3u_result.m3u_path} "
+                f"({m3u_result.track_count} track(s))"
+            )
+        elif m3u_result.status == M3U_STATUS_FAILED:
+            for error in m3u_result.errors:
+                print(f"[m3u] ERROR: {error}", file=sys.stderr)
+        else:
+            print("[output] M3U8 skipped by settings.generate_m3u8=false")
+        print(f"[output] Export report written: {report_path}")
+        if m3u_result.status == M3U_STATUS_FAILED:
+            sys.exit(4)
 
 
 if __name__ == "__main__":

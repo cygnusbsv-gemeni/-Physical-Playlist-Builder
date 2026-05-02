@@ -1,0 +1,172 @@
+{
+  "format": "physical_playlist_export_session.v1",
+  "created_at": "2026-05-02T01:59:50.115547+00:00",
+  "input": {
+    "path": "DOC\\examples\\playlist_job.v1.canonical.json",
+    "type": "json"
+  },
+  "playlist": {
+    "name": "Canonical Demo Playlist",
+    "track_count": 2
+  },
+  "output": {
+    "requested_path": "out",
+    "final_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\Canonical Demo Playlist_20260502_045950",
+    "create_subfolder": true,
+    "overwrite": false
+  },
+  "handoff": {
+    "final_output_dir": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\Canonical Demo Playlist_20260502_045950",
+    "safe_operation_count": 0,
+    "audio_files_copied": false,
+    "copy_report_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\Canonical Demo Playlist_20260502_045950\\export_report.json",
+    "copy_summary": {
+      "copied": 0,
+      "skipped": 1,
+      "failed": 0,
+      "source_missing": 1,
+      "destination_exists": 0,
+      "not_implemented": 0,
+      "total": 2
+    }
+  },
+  "job": {
+    "format": "physical_playlist_job.v1",
+    "playlist_name": "Canonical Demo Playlist",
+    "playlist_description": "Neutral contract example for validation and dry-run checks.",
+    "playlist_track_count": 2,
+    "settings": {
+      "output_format": "source",
+      "copy_mode": "copy_if_compatible",
+      "normalize_loudness": false,
+      "target_lufs": -14.0,
+      "true_peak_db": -1.0,
+      "write_tags": false,
+      "generate_m3u8": true,
+      "filename_template": "{position:02d} - {artist} - {title}"
+    },
+    "tracks": [
+      {
+        "source_path": "/music/library/Artist/Album/01 - Ready Track.flac",
+        "position": 1,
+        "output_filename": "01 - Artist - Ready Track.flac",
+        "filename_hint": null,
+        "title": "Ready Track",
+        "artist": "Artist",
+        "album": "Album",
+        "albumartist": null,
+        "tracknumber": null,
+        "date": null,
+        "year": null,
+        "genre": null,
+        "duration_sec": null,
+        "codec": null,
+        "bitrate_kbps": null,
+        "sample_rate_hz": null,
+        "channels": null,
+        "bit_depth": null,
+        "tag_format": null,
+        "source_status": null,
+        "availability": null,
+        "producer_meta": {},
+        "warnings": [],
+        "blockers": []
+      },
+      {
+        "source_path": "/music/library/Missing Artist/Missing Track.flac",
+        "position": 2,
+        "output_filename": null,
+        "filename_hint": null,
+        "title": "Missing Track",
+        "artist": "Missing Artist",
+        "album": null,
+        "albumartist": null,
+        "tracknumber": null,
+        "date": null,
+        "year": null,
+        "genre": null,
+        "duration_sec": null,
+        "codec": null,
+        "bitrate_kbps": null,
+        "sample_rate_hz": null,
+        "channels": null,
+        "bit_depth": null,
+        "tag_format": null,
+        "source_status": null,
+        "availability": null,
+        "producer_meta": {},
+        "warnings": [],
+        "blockers": [
+          "Source file was unavailable when the job was generated."
+        ]
+      }
+    ],
+    "validation_warnings": [],
+    "validation_blockers": [
+      "Source file was unavailable when the job was generated."
+    ],
+    "legacy_input": false
+  },
+  "dry_run_plan": {
+    "output_dir": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\Canonical Demo Playlist_20260502_045950",
+    "output_dir_valid": true,
+    "output_dir_exists": false,
+    "output_dir_overwrites_source_dir": false,
+    "output_dir_inside_source_dir": false,
+    "dangerous_output_paths": [],
+    "duplicate_output_filenames": [],
+    "warnings": [],
+    "errors": [],
+    "operations": [
+      {
+        "position": 1,
+        "source_path": "/music/library/Artist/Album/01 - Ready Track.flac",
+        "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\Canonical Demo Playlist_20260502_045950\\01 - Artist - Ready Track.flac",
+        "planned_action": "error",
+        "source_exists": false,
+        "destination_filename_conflict": false,
+        "expected_output_filename": "01 - Artist - Ready Track.flac",
+        "warnings": [],
+        "errors": [
+          "Source file does not exist on disk: /music/library/Artist/Album/01 - Ready Track.flac"
+        ]
+      },
+      {
+        "position": 2,
+        "source_path": "/music/library/Missing Artist/Missing Track.flac",
+        "destination_path": null,
+        "planned_action": "skip_blocked",
+        "source_exists": false,
+        "destination_filename_conflict": false,
+        "expected_output_filename": "",
+        "warnings": [],
+        "errors": [
+          "Source file was unavailable when the job was generated."
+        ]
+      }
+    ],
+    "blocked_tracks": [
+      {
+        "position": 2,
+        "source_path": "/music/library/Missing Artist/Missing Track.flac",
+        "destination_path": null,
+        "planned_action": "skip_blocked",
+        "source_exists": false,
+        "destination_filename_conflict": false,
+        "expected_output_filename": "",
+        "warnings": [],
+        "errors": [
+          "Source file was unavailable when the job was generated."
+        ]
+      }
+    ],
+    "summary": {
+      "operation_count": 2,
+      "blocked_count": 1,
+      "safe_operation_count": 0,
+      "error_count": 2,
+      "warning_count": 0,
+      "has_errors": true
+    }
+  }
+}

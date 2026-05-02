@@ -1,0 +1,49 @@
+{
+  "format": "physical_playlist_export_report.v1",
+  "created_at": "2026-05-02T01:59:50.117137+00:00",
+  "output": {
+    "final_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\Canonical Demo Playlist_20260502_045950",
+    "overwrite": false
+  },
+  "summary": {
+    "copied": 0,
+    "skipped": 1,
+    "failed": 0,
+    "source_missing": 1,
+    "destination_exists": 0,
+    "not_implemented": 0,
+    "total": 2
+  },
+  "tracks": [
+    {
+      "position": 1,
+      "source_path": "/music/library/Artist/Album/01 - Ready Track.flac",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\Canonical Demo Playlist_20260502_045950\\01 - Artist - Ready Track.flac",
+      "expected_output_filename": "01 - Artist - Ready Track.flac",
+      "planned_action": "error",
+      "status": "source_missing",
+      "source_size": null,
+      "destination_size": null,
+      "bytes_copied": 0,
+      "warnings": [],
+      "errors": [
+        "Source file does not exist on disk: /music/library/Artist/Album/01 - Ready Track.flac"
+      ]
+    },
+    {
+      "position": 2,
+      "source_path": "/music/library/Missing Artist/Missing Track.flac",
+      "destination_path": null,
+      "expected_output_filename": "",
+      "planned_action": "skip_blocked",
+      "status": "skipped",
+      "source_size": null,
+      "destination_size": null,
+      "bytes_copied": 0,
+      "warnings": [],
+      "errors": [
+        "Source file was unavailable when the job was generated."
+      ]
+    }
+  ]
+}

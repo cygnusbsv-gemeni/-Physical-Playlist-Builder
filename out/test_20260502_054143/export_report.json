@@ -1,0 +1,232 @@
+{
+  "format": "physical_playlist_export_report.v1",
+  "created_at": "2026-05-02T02:41:44.323659+00:00",
+  "output": {
+    "final_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143",
+    "overwrite": false
+  },
+  "summary": {
+    "copied": 14,
+    "skipped": 0,
+    "failed": 0,
+    "source_missing": 0,
+    "destination_exists": 0,
+    "not_implemented": 0,
+    "total": 14
+  },
+  "tracks": [
+    {
+      "position": 1,
+      "source_path": "D:\\Music\\000_Избранное наборы\\Source\\Мать\\Alexandre Tharaud - Bach (2024) [24-96]\\25. Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).flac",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\01 - Alexandre Tharaud - Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).flac",
+      "expected_output_filename": "01 - Alexandre Tharaud - Ave Maria (Meditation After Bach's Prelude and Fugue in C Major, BWV 846).flac",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 70802501,
+      "destination_size": 70802501,
+      "bytes_copied": 70802501,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 2,
+      "source_path": "D:\\Music\\arc\\072018\\Ленинград\\Ленинград\\1999 - Пуля\\03. Таня.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\02 - Ленинград - Таня.mp3",
+      "expected_output_filename": "02 - Ленинград - Таня.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 6135797,
+      "destination_size": 6135797,
+      "bytes_copied": 6135797,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 3,
+      "source_path": "D:\\Music\\0_Best\\RCA The Golden Era of Living Stereo (2016) 60CD.mp3\\CD33. Bach - Janigro, Solisti di Zagreb\\01. Suite for Orchestra (Overture) No.2 in B minor_ Ouverture.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\03 - Johann Sebastian Bach - Suite for Orchestra (Overture) No.2 in B minor_ Ouverture.mp3",
+      "expected_output_filename": "03 - Johann Sebastian Bach - Suite for Orchestra (Overture) No.2 in B minor_ Ouverture.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 18268032,
+      "destination_size": 18268032,
+      "bytes_copied": 18268032,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 4,
+      "source_path": "I:\\Music\\000_Избранное наборы\\Source\\new092019\\Best Rock Ballads\\059. Chris de Burgh - The Lady in Red.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\04 - Chris de Burgh - The Lady in Red.mp3",
+      "expected_output_filename": "04 - Chris de Burgh - The Lady in Red.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 10296729,
+      "destination_size": 10296729,
+      "bytes_copied": 10296729,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 5,
+      "source_path": "I:\\Music\\000_Избранное наборы\\Source\\Народные\\Тріо Маренич\\2003 - Співає Тріо Маренич\\01 - Несе Галя воду.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\05 - Тріо Маренич - Несе Галя воду.mp3",
+      "expected_output_filename": "05 - Тріо Маренич - Несе Галя воду.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 9657043,
+      "destination_size": 9657043,
+      "bytes_copied": 9657043,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 6,
+      "source_path": "I:\\Music\\000_Избранное наборы\\Source\\Народные\\Христина Соловій\\2015 - Жива вода\\01. Несе Галя воду.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\06 - Христина Соловій - Несе Галя воду.mp3",
+      "expected_output_filename": "06 - Христина Соловій - Несе Галя воду.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 9538651,
+      "destination_size": 9538651,
+      "bytes_copied": 9538651,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 7,
+      "source_path": "D:\\Music\\Роковщина\\Doors\\02 Strange Days 1967\\07 People Are Strange.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\07 - The Doors - People Are Strange.mp3",
+      "expected_output_filename": "07 - The Doors - People Are Strange.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 5297718,
+      "destination_size": 5297718,
+      "bytes_copied": 5297718,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 8,
+      "source_path": "D:\\Music\\arc\\062018\\01\\Виктор Цой и группа Кино - 55 (3CD) (2017) MP3\\01 55 (CD1) (2017)\\15 Группа крови.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\08 - Виктор Цой и группа Кино - Группа крови.mp3",
+      "expected_output_filename": "08 - Виктор Цой и группа Кино - Группа крови.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 11445249,
+      "destination_size": 11445249,
+      "bytes_copied": 11445249,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 9,
+      "source_path": "D:\\Music\\arc\\062018\\02\\Кино (Виктор Цой) - Неремастированная CD-дискография (20 CD+bonus), (1989-1995), MP3 (tracks), 320 kbps\\1989-Звезда по имени Солнце (MF (Михаил Фридман) Vol. 2 1995)\\02. Кино - Звезда По Имени Солнце.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\09 - Кино - Звезда По Имени Солнце.mp3",
+      "expected_output_filename": "09 - Кино - Звезда По Имени Солнце.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 9026172,
+      "destination_size": 9026172,
+      "bytes_copied": 9026172,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 10,
+      "source_path": "D:\\Music\\0_Best\\Troitsky\\Best of 1983\\13. Eurythmics-sweet_dreams_are_made_of_this.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\10 - Eurythmics - Sweet Dreams (Are Made Of This.mp3",
+      "expected_output_filename": "10 - Eurythmics - Sweet Dreams (Are Made Of This.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 8726500,
+      "destination_size": 8726500,
+      "bytes_copied": 8726500,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 11,
+      "source_path": "I:\\Music\\000_Избранное наборы\\Source\\Older\\The White Stripes - Seven Nation Army (The Glitch Mob Remix) [2011, 24bit.FLAC]\\The White Stripes - Seven Nation Army (The Glitch Mob Remix).flac",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\11 - The White Stripes - Seven Nation Army (The Glitch Mob Remix).flac",
+      "expected_output_filename": "11 - The White Stripes - Seven Nation Army (The Glitch Mob Remix).flac",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 48368670,
+      "destination_size": 48368670,
+      "bytes_copied": 48368670,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 12,
+      "source_path": "I:\\Music\\000_Избранное наборы\\Source\\new092019\\Diskoteka 70-80\\077_Modern Talking - Cheri, Cheri Lady.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\12 - 077_Modern Talking - Cheri, Cheri Lady.mp3",
+      "expected_output_filename": "12 - 077_Modern Talking - Cheri, Cheri Lady.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 6315459,
+      "destination_size": 6315459,
+      "bytes_copied": 6315459,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 13,
+      "source_path": "I:\\Music\\01_NEW\\РУССО\\Шуфутинский Михаил\\Неофициальные альбомы и сборники\\2008 - Михаил Шуфутинский - Лучшие песни часть I\\02 - Михаил Шуфутинский - Марджанджа.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\13 - Михаил Шуфутинский - Марджанджа.mp3",
+      "expected_output_filename": "13 - Михаил Шуфутинский - Марджанджа.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 7911138,
+      "destination_size": 7911138,
+      "bytes_copied": 7911138,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    },
+    {
+      "position": 14,
+      "source_path": "D:\\Music\\000_Избранное наборы\\PlayList\\Izbran_092020\\061_Gloria Gainor - I Will Survive-Diskoteka 80-h.mp3",
+      "destination_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\14 - 061_Gloria Gainor - I Will Survive.mp3",
+      "expected_output_filename": "14 - 061_Gloria Gainor - I Will Survive.mp3",
+      "planned_action": "copy",
+      "status": "copied",
+      "source_size": 6565391,
+      "destination_size": 6565391,
+      "bytes_copied": 6565391,
+      "warnings": [
+        "No integrated loudness value is available yet."
+      ],
+      "errors": []
+    }
+  ],
+  "m3u_path": "E:\\YandexDisk\\Dev\\_MUSIC\\physical_playlist_builder\\out\\test_20260502_054143\\playlist.m3u8",
+  "m3u_track_count": 14,
+  "m3u_status": "generated"
+}

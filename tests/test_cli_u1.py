@@ -11,6 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ppb.cli import main
+from ppb.copier import EXPORT_REPORT_FILENAME
 from ppb.contract import SUPPORTED_FORMAT
 
 
@@ -127,37 +128,49 @@ def test_malformed_json_exits_with_error():
         cleanup_workspace(workspace)
 
 
-def test_cli_creates_timestamped_output_folder_and_session_without_copying_audio():
-    workspace = make_workspace()
-    try:
-        source = workspace / "music" / "song.flac"
-        source.parent.mkdir()
-        source.write_text("fixture", encoding="utf-8")
-        out_dir = workspace / "out"
-        job = write_job(
-            workspace,
-            canonical_job(
-                [
-                    {
-                        "source_path": str(source),
-                        "position": 1,
-                        "artist": "Artist",
-                        "title": "Song",
-                    }
-                ]
-            ),
-        )
-        main(["--input", str(job), "--out", str(out_dir)])
-        session_path = find_export_session(out_dir)
-        output_dir = session_path.parent
-        assert output_dir.name.startswith("Road Trip_")
-        assert sorted(path.name for path in output_dir.iterdir()) == ["export_session.json"]
-        data = json.loads(session_path.read_text(encoding="utf-8"))
-        assert data["output"]["final_path"] == str(output_dir)
-        assert data["handoff"]["final_output_dir"] == str(output_dir)
-        assert data["handoff"]["audio_files_copied"] is False
-    finally:
-        cleanup_workspace(workspace)
+def test_cli_runs_b6_copy_stage_and_writes_export_report(tmp_path):
+    source = tmp_path / "music" / "song.flac"
+    source.parent.mkdir()
+    source_bytes = b"fixture audio bytes"
+    source.write_bytes(source_bytes)
+    out_dir = tmp_path / "out"
+    job = write_job(
+        tmp_path,
+        canonical_job(
+            [
+                {
+                    "source_path": str(source),
+                    "position": 1,
+                    "artist": "Artist",
+                    "title": "Song",
+                    "output_filename": "copied-song.flac",
+                }
+            ]
+        ),
+    )
+
+    main(["--input", str(job), "--out", str(out_dir)])
+
+    session_path = find_export_session(out_dir)
+    output_dir = session_path.parent
+    destination = output_dir / "copied-song.flac"
+    report_path = output_dir / EXPORT_REPORT_FILENAME
+
+    assert output_dir.name.startswith("Road Trip_")
+    assert destination.read_bytes() == source_bytes
+    assert source.read_bytes() == source_bytes
+    assert report_path.exists()
+
+    session_data = json.loads(session_path.read_text(encoding="utf-8"))
+    assert session_data["output"]["final_path"] == str(output_dir)
+    assert session_data["handoff"]["final_output_dir"] == str(output_dir)
+    assert session_data["handoff"]["audio_files_copied"] is True
+    assert session_data["handoff"]["copy_summary"]["copied"] == 1
+
+    report_data = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report_data["summary"]["copied"] == 1
+    assert report_data["tracks"][0]["status"] == "copied"
+    assert report_data["tracks"][0]["destination_path"] == str(destination)
 
 
 def test_cli_dry_run_report_writes_json_without_output_folder(capsys):

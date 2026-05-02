@@ -6,19 +6,19 @@
 
 ## Current Stage
 
-B10.3 - Apply optional loudness normalization to exported copies.
+B10.4 - Focused loudness tests and hardening.
 
-The project validates neutral playlist input, builds a dry-run plan, creates a safe output folder, writes `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert` through `ppb/ffmpeg_tools.py`, measures loudness for successfully exported final output files when `settings.normalize_loudness=true`, normalizes those exported copies with ffmpeg `loudnorm` second pass, generates a UTF-8 `playlist.m3u8` from final copied/converted files, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. B10.3 uses temporary normalization outputs inside the final output folder and replaces an exported copy only after ffmpeg succeeds. If ffmpeg is missing for conversion, copy-only tracks can still complete and convert tracks are reported as `ffmpeg_missing`. If ffmpeg is missing during loudness processing, copied/converted outputs stay intact and per-track loudness status is reported as `ffmpeg_missing`. Tag writing and resume are still not implemented.
+The project validates neutral playlist input, builds a dry-run plan, creates a safe output folder, writes `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert` through `ppb/ffmpeg_tools.py`, measures loudness for successfully exported final output files when `settings.normalize_loudness=true`, normalizes those exported copies with ffmpeg `loudnorm` second pass, generates a UTF-8 `playlist.m3u8` from final copied/converted files, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. B10.3 uses temporary normalization outputs inside the final output folder and replaces an exported copy only after ffmpeg succeeds. B10.4 adds focused pytest coverage for loudness success, skip, ffmpeg-missing, failure, exported-copy path safety, M3U8/report/log behavior, and loudnorm temp cleanup. No runtime loudness defect was found during B10.4, so the B10.3 implementation remains unchanged. Tag writing and resume are still not implemented.
 
 ## Project File Map
 
 | File path | Responsibility | Important notes |
 |---|---|---|
-| `README.md` | Project documentation and usage instructions | Must describe only implemented behavior. Updated for B10.3 exported-copy loudness normalization and clarified that tag writing/resume are still not implemented. |
+| `README.md` | Project documentation and usage instructions | Must describe only implemented behavior. Updated for B10.4 focused loudness test instructions and clarified that tag writing/resume are still not implemented. |
 | `PROJECT_FILES.md` | File map, current stage changes, and generated/runtime file notes | Updated after each completed stage. |
 | `requirements.txt` | Python/test dependencies | Core runtime has no third-party dependencies. |
 | `ppb/__init__.py` | Package marker | No runtime logic. |
-| `ppb/cli.py` | CLI entry point: args, input read, validation, planning, output-folder creation, export/loudness/M3U8/report/log execution, progress output, final summary | B10.3 runs loudness measurement and second-pass normalization after successful copy/conversion only when `settings.normalize_loudness=true` and `--skip-loudness` is not passed. It never measures or normalizes source files directly. |
+| `ppb/cli.py` | CLI entry point: args, input read, validation, planning, output-folder creation, export/loudness/M3U8/report/log execution, progress output, final summary | Runs loudness measurement and second-pass normalization after successful copy/conversion only when `settings.normalize_loudness=true` and `--skip-loudness` is not passed. It never measures or normalizes source files directly. |
 | `ppb/contract.py` | Neutral input contract dataclasses (`TrackEntry`, `PlaylistJob`, settings) | Independent of MusicLib Web or any database. |
 | `ppb/validator.py` | Validation and normalization for `physical_playlist_job.v1` | Blocked tracks remain allowed in non-strict mode and are skipped later. |
 | `ppb/input_readers.py` | TXT / CSV / M3U / M3U8 input readers | Converts convenience inputs into the neutral `PlaylistJob` path. |
@@ -33,9 +33,10 @@ The project validates neutral playlist input, builds a dry-run plan, creates a s
 | `DOC/physical_playlist_job_v1_contract.md` | External neutral JSON contract documentation | Read-only for B8; contract was not changed. |
 | `DOC/examples/playlist_job.v1.canonical.json` | Canonical sample job | Used for smoke validation; not edited in B8. |
 | `example_playlist_job.json` | Additional sample job | Not edited in B8. |
-| `tests/test_cli_u1.py` | CLI smoke/regression tests from earlier stages | Includes focused CLI copy-stage regression using only temporary files and output folders. Not changed in B9.3. |
+| `tests/test_cli_u1.py` | CLI smoke/regression tests from earlier stages | Includes focused CLI copy-stage regression using only temporary files and output folders. Not changed in B10.4. |
 | `tests/test_copier.py` | Focused copy-stage tests | Covers copy success, unchanged sources, export report serialization, missing sources, blocked tracks, convert failure/ffmpeg-missing behavior for invalid fixture audio, and destination conflict behavior. |
-| `tests/test_ffmpeg_conversion.py` | Focused B9.3 conversion tests | Uses only pytest temporary folders and synthetic WAV files from Python stdlib `wave`; covers successful WAV to MP3 conversion when ffmpeg is available, ffmpeg missing, ffmpeg failure, destination conflicts, overwrite, reports, logs, M3U8 behavior, and source immutability. Not changed in B10.3. |
+| `tests/test_ffmpeg_conversion.py` | Focused B9.3 conversion tests | Uses only pytest temporary folders and synthetic WAV files from Python stdlib `wave`; covers successful WAV to MP3 conversion when ffmpeg is available, ffmpeg missing, ffmpeg failure, destination conflicts, overwrite, reports, logs, M3U8 behavior, and source immutability. Not changed in B10.4. |
+| `tests/test_loudness_processing.py` | Focused B10.4 loudness tests | Uses only pytest temporary folders and synthetic audio; covers loudness success, exported-copy-only paths, `--skip-loudness`, `settings.normalize_loudness=false`, loudness ffmpeg-missing, bad copied audio failure, M3U8/report/log behavior, and loudnorm temp cleanup. |
 | `tests/test_validator_u2.py` | Validator tests | Not edited in B6. |
 | `tests/test_input_readers_u3.py` | Input reader tests | Not edited in B6. |
 | `tests/test_planner_u4.py` | Planner tests | Not edited in B6. |
@@ -44,11 +45,9 @@ The project validates neutral playlist input, builds a dry-run plan, creates a s
 
 | File path | Reason for change |
 |---|---|
-| `ppb/ffmpeg_tools.py` | Added `normalize_loudness_second_pass()` for exported-copy loudnorm normalization using measured first-pass values, safe temporary outputs inside the final output folder, and success-only replacement of the exported copy. |
-| `ppb/cli.py` | Runs second-pass normalization after successful first-pass measurement for copied/converted outputs only; records normalization started/completed and per-track normalized/skipped/failed/ffmpeg-missing log entries; keeps M3U8 generation after final files are stable. |
-| `ppb/report.py` | Added per-track `loudness_normalization_status`, `normalized_output_path`, and normalization error/stderr fields; updated loudness totals and text report summary to include measured/normalized/skipped/failed/ffmpeg-missing. |
-| `README.md` | Documented B10.3 exported-copy loudness normalization behavior, temp-file safety, ffmpeg-missing handling, report/log fields, limitations, and next stage. |
-| `PROJECT_FILES.md` | Updated the stage description, file map, current-stage changes, generated files, and safety notes for B10.3. |
+| `tests/test_loudness_processing.py` | Added focused B10.4 pytest coverage for loudness measurement/normalization success, exported-copy-only processing, skipped loudness paths, ffmpeg-missing handling, bad copied audio failures, and loudnorm temp cleanup. |
+| `README.md` | Updated the current stage and focused test commands for B10.4 while keeping runtime behavior documentation limited to implemented B10.3 loudness behavior. |
+| `PROJECT_FILES.md` | Updated the stage description, file map, current-stage changes, generated files, and safety notes for B10.4. |
 
 ## Generated/Runtime Files
 
@@ -85,4 +84,4 @@ These files and folders are generated during local runs and should not be edited
 - Existing destination files are not overwritten unless `--overwrite` is active.
 - Planned convert tracks are executed only for supported helper formats (`mp3`, `flac`, `wav`, `m4a`, `aac`).
 - Loudness normalization helper-level outputs are currently supported for `mp3`, `flac`, `wav`, `m4a`, and `aac`; unsupported final extensions are reported as failed normalization attempts.
-- Tag writing and resume are still not implemented in B10.3.
+- Tag writing and resume are still not implemented in B10.4.

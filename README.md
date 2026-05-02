@@ -6,7 +6,7 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: B10.3 optional loudness normalization for exported copies. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, measures loudness for successfully exported output files when `settings.normalize_loudness=true`, applies ffmpeg `loudnorm` second-pass normalization to those exported copies, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. Loudness processing never touches source audio files and does not write tags; tag writing, resume, and bundled ffmpeg are not implemented.
+Current stage: B10.4 focused loudness tests and hardening. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, measures loudness for successfully exported output files when `settings.normalize_loudness=true`, applies ffmpeg `loudnorm` second-pass normalization to those exported copies, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. B10.4 adds focused pytest coverage for the B10.3 loudness workflow; the implemented runtime behavior is unchanged. Loudness processing never touches source audio files and does not write tags; tag writing, resume, and bundled ffmpeg are not implemented.
 
 ## Supported Input Types
 
@@ -345,16 +345,16 @@ pip install -r requirements.txt
 pytest tests/
 ```
 
-Focused B10.3 checks:
+Focused B10.4 checks:
 
 ```bash
 python -m ppb.cli --help
-python -m py_compile ppb\cli.py ppb\report.py ppb\logging_setup.py ppb\ffmpeg_tools.py
-python -m pytest tests\test_ffmpeg_conversion.py -vv --tb=short --basetemp C:\Temp\project_pytest\b10_3_conversion -p no:cacheprovider
-python -m pytest tests\test_copier.py tests\test_cli_u1.py -q --basetemp C:\Temp\project_pytest\b10_3_regression -p no:cacheprovider
+python -m py_compile ppb\cli.py ppb\ffmpeg_tools.py ppb\report.py ppb\m3u.py
+python -m pytest tests\test_loudness_processing.py -vv --tb=short --basetemp C:\Temp\project_pytest\b10_4 -p no:cacheprovider
+python -m pytest tests\test_ffmpeg_conversion.py tests\test_copier.py tests\test_cli_u1.py -q --basetemp C:\Temp\project_pytest\b10_4_regression -p no:cacheprovider
 ```
 
-If `C:\Temp` is not writable in the local environment, use another explicit pytest temp directory outside the repository when possible. The focused conversion tests generate synthetic WAV fixtures with Python standard library `wave`; they do not use real user music files. Tests that require real WAV to MP3 conversion skip cleanly when ffmpeg is not available.
+If `C:\Temp` is not writable in the local environment, use another explicit pytest temp directory outside the repository when possible. The focused conversion and loudness tests generate synthetic WAV fixtures with Python standard library `wave`; they do not use real user music files. Tests that require real ffmpeg conversion or loudness normalization skip cleanly when ffmpeg is not available, while ffmpeg-missing coverage still runs with an invalid explicit `--ffmpeg` path.
 
 ## Current Limitations
 
@@ -371,4 +371,4 @@ If `C:\Temp` is not writable in the local environment, use another explicit pyte
 
 ## Next Stage
 
-Next stage is not implemented yet. A logical next step after B10.3 is a focused tag-writing stage that writes tags only to exported copies after copy/conversion/loudness processing is complete. Tag writing and resume remain not implemented.
+Next stage is not implemented yet. A logical next step after B10.4 is a focused tag-writing stage that writes tags only to exported copies after copy/conversion/loudness processing is complete. Tag writing and resume remain not implemented.

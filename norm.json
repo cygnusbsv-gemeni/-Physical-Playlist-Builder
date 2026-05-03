@@ -1,0 +1,313 @@
+{
+  "format": "physical_playlist_job.v1",
+  "generated_at": "2026-05-03T04:43:36.439404+00:00",
+  "playlist": {
+    "description": "Imported track list",
+    "name": "norm",
+    "track_count": 6
+  },
+  "producer_meta": {
+    "blockers": [],
+    "job_filename": "playlist_job.json",
+    "producer": "MusicLib Web",
+    "producer_format": "musiclib.export_plan.v1",
+    "producer_generated_at": "2026-05-03T04:43:36.438404+00:00",
+    "producer_stage": "prepare_only",
+    "source_playlist_id": "4761dec3-961f-42ad-a228-6bc48ec50939",
+    "warnings": [
+      {
+        "code": "loudness_not_measured",
+        "message": "No integrated loudness value is available yet.",
+        "severity": "note",
+        "source": "producer"
+      }
+    ],
+    "will_write_files": false
+  },
+  "settings": {
+    "copy_mode": "copy_if_compatible",
+    "filename_template": "{position:02d} - {artist} - {title}",
+    "generate_m3u8": true,
+    "normalize_loudness": true,
+    "output_format": "mp3",
+    "target_lufs": -16,
+    "true_peak_db": -1,
+    "write_tags": true
+  },
+  "summary": {
+    "blocked_count": 0,
+    "blocked_track_positions": [],
+    "blocker_count": 0,
+    "can_run": true,
+    "ready_count": 6,
+    "status": "warnings",
+    "track_count": 6,
+    "warning_count": 6
+  },
+  "tracks": [
+    {
+      "album": "Zaycev.Net",
+      "albumartist": null,
+      "artist": "Dj Паша Кореец",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": null,
+      "duration_sec": 356.44,
+      "filename_hint": "01 - Dj Паша Кореец - Smells Like Teen Spirit.mp3",
+      "genre": null,
+      "output_filename": "01 - Dj Паша Кореец - Smells Like Teen Spirit.mp3",
+      "position": 1,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 668,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\000_Избранное наборы\\PlayList\\ALL+\\Dj Pasha Koreec_Smells Like Teen Spirit-Zaycev.Net.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "Smells Like Teen Spirit",
+      "tracknumber": null,
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note",
+          "source": "producer"
+        }
+      ],
+      "year": null
+    },
+    {
+      "album": "Putumayo Presents - Gypsy Groove",
+      "albumartist": "Various Artists",
+      "artist": "Gipsy.cz",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2007",
+      "duration_sec": 191.347,
+      "filename_hint": "02 - Gipsy.cz - Jednou (Czech Republic).mp3",
+      "genre": "World",
+      "output_filename": "02 - Gipsy.cz - Jednou (Czech Republic).mp3",
+      "position": 2,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 669,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\000_Избранное наборы\\PlayList\\ALL+\\Jednou (Czech Republic) - Gipsy.cz - Putumayo Presents - Gypsy Groove.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "Jednou (Czech Republic)",
+      "tracknumber": "03",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note",
+          "source": "producer"
+        }
+      ],
+      "year": "2007"
+    },
+    {
+      "album": "Bach",
+      "albumartist": "Alexandre Tharaud",
+      "artist": "Alexandre Tharaud",
+      "availability": "available",
+      "bit_depth": 24,
+      "bitrate_kbps": 4608,
+      "blockers": [],
+      "channels": 2,
+      "codec": "FLAC",
+      "date": "2024-10-18",
+      "duration_sec": 234.32,
+      "filename_hint": "03 - Alexandre Tharaud - Keyboard Concerto in D Minor, BWV 974_ II. Adagio (After Marcello's Oboe Concerto).mp3",
+      "genre": "Classique",
+      "output_filename": "03 - Alexandre Tharaud - Keyboard Concerto in D Minor, BWV 974_ II. Adagio (After Marcello's Oboe Concerto).mp3",
+      "position": 3,
+      "producer_meta": {
+        "audio_action": "convert",
+        "processing_notes": [
+          "Readiness: Physical Playlist Builder would need MP3 output audio.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 670,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 96000,
+      "source_path": "D:\\Music\\000_Избранное наборы\\Source\\Мать\\Alexandre Tharaud - Bach (2024) [24-96]\\01. Keyboard Concerto in D Minor, BWV 974_ II. Adagio (After Marcello's Oboe Concerto).flac",
+      "source_status": "active",
+      "tag_format": "VorbisComment",
+      "title": "Keyboard Concerto in D Minor, BWV 974: II. Adagio (After Marcello's Oboe Concerto)",
+      "tracknumber": "1",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note",
+          "source": "producer"
+        }
+      ],
+      "year": "2024"
+    },
+    {
+      "album": "CD5 - Piano Classics",
+      "albumartist": "Rachmaninov, Chopin, Beethoven, Schubert, Debussy, Bach, etc",
+      "artist": "Chopin; Mikhail Pletnev",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2016",
+      "duration_sec": 262.933,
+      "filename_hint": "04 - Chopin; Mikhail Pletnev - Nocturne in C-sharp minor, op.posth.mp3",
+      "genre": "Classical",
+      "output_filename": "04 - Chopin; Mikhail Pletnev - Nocturne in C-sharp minor, op.posth.mp3",
+      "position": 4,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 671,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\000_Избранное наборы\\PlayList\\Mother\\Nocturne in C-sharp minor, op.posth.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "Nocturne in C-sharp minor, op.posth",
+      "tracknumber": "2/17",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note",
+          "source": "producer"
+        }
+      ],
+      "year": "2016"
+    },
+    {
+      "album": "CD5 - Piano Classics",
+      "albumartist": "Rachmaninov, Chopin, Beethoven, Schubert, Debussy, Bach, etc",
+      "artist": "Chopin; Nikolai Lugansky",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2016",
+      "duration_sec": 127.48,
+      "filename_hint": "05 - Chopin; Nikolai Lugansky - Prelude in E minor op.28 no.4.mp3",
+      "genre": "Classical",
+      "output_filename": "05 - Chopin; Nikolai Lugansky - Prelude in E minor op.28 no.4.mp3",
+      "position": 5,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 672,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\000_Избранное наборы\\PlayList\\Mother\\Prelude in E minor op.28 no.4.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "Prelude in E minor op.28 no.4",
+      "tracknumber": "9/17",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note",
+          "source": "producer"
+        }
+      ],
+      "year": "2016"
+    },
+    {
+      "album": "iTunes Session",
+      "albumartist": null,
+      "artist": "The Black Keys",
+      "availability": "available",
+      "bit_depth": null,
+      "bitrate_kbps": 320,
+      "blockers": [],
+      "channels": 2,
+      "codec": "MP3",
+      "date": "2010",
+      "duration_sec": 206.75,
+      "filename_hint": "06 - The Black Keys - Chop & Change (iTunes Session).mp3",
+      "genre": "Blues-Rock",
+      "output_filename": "06 - The Black Keys - Chop & Change (iTunes Session).mp3",
+      "position": 6,
+      "producer_meta": {
+        "audio_action": "copy",
+        "processing_notes": [
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for ID3v2.4.",
+          "Playlist job would require integrated loudness measurement."
+        ],
+        "readiness_status": "ready",
+        "source_item_id": 673,
+        "tag_mode": "normalize",
+        "target_ext": ".mp3"
+      },
+      "sample_rate_hz": 44100,
+      "source_path": "D:\\Music\\000_Избранное наборы\\PlayList\\2022_05\\The Black Keys_Chop & Change (iTunes Session)-iTunes Session.mp3",
+      "source_status": "active",
+      "tag_format": "ID3v2.3",
+      "title": "Chop & Change (iTunes Session)",
+      "tracknumber": "01/10",
+      "warnings": [
+        {
+          "code": "loudness_not_measured",
+          "message": "No integrated loudness value is available yet.",
+          "severity": "note",
+          "source": "producer"
+        }
+      ],
+      "year": "2010"
+    }
+  ]
+}

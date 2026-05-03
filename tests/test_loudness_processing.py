@@ -56,6 +56,7 @@ def write_job(
     normalize_loudness: bool = True,
     output_format: str = "source",
     playlist_name: str = "Loudness Tests",
+    write_tags: bool = False,
 ) -> Path:
     job = {
         "format": SUPPORTED_FORMAT,
@@ -69,7 +70,7 @@ def write_job(
             "normalize_loudness": normalize_loudness,
             "target_lufs": -14.0,
             "true_peak_db": -1.0,
-            "write_tags": False,
+            "write_tags": write_tags,
             "generate_m3u8": True,
             "filename_template": "{position:02d} - {artist} - {title}",
         },
@@ -126,22 +127,34 @@ def test_cli_normalize_loudness_success_reports_logs_m3u_and_preserves_source(tm
     assert track["destination_path"] == str(destination.resolve(strict=False))
     assert track["loudness_status"] == LOUDNESS_STATUS_MEASURED
     assert track["loudness_normalization_status"] == LOUDNESS_STATUS_NORMALIZED
+    assert track["post_loudness_status"] == LOUDNESS_STATUS_MEASURED
     assert isinstance(track["input_i"], float)
     assert isinstance(track["input_tp"], float)
     assert isinstance(track["input_lra"], float)
     assert isinstance(track["input_thresh"], float)
     assert isinstance(track["target_offset"], float)
+    assert isinstance(track["post_input_i"], float)
+    assert isinstance(track["post_input_tp"], float)
+    assert isinstance(track["post_input_lra"], float)
+    assert isinstance(track["post_input_thresh"], float)
+    assert isinstance(track["post_target_offset"], float)
     assert track["normalized_output_path"] == str(destination.resolve(strict=False))
+    assert track["size_after_export_before_loudness"] is not None
+    assert track["size_after_loudness"] == destination.stat().st_size
+    assert track["final_size"] == destination.stat().st_size
     assert report["loudness_totals"][LOUDNESS_STATUS_MEASURED] == 1
     assert report["loudness_totals"][LOUDNESS_STATUS_NORMALIZED] == 1
+    assert report["loudness_verification_totals"]["verified"] == 1
 
     report_text = (output_dir / "export_report.txt").read_text(encoding="utf-8")
     assert "Measured: 1" in report_text
     assert "Normalized: 1" in report_text
+    assert "Post-normalization verified: 1" in report_text
 
     log_text = (output_dir / "export.log").read_text(encoding="utf-8")
     assert "loudness measured" in log_text
     assert "loudness normalized" in log_text
+    assert "post-normalization loudness verified" in log_text
 
     playlist_text = (output_dir / "playlist.m3u8").read_text(encoding="utf-8")
     assert "#EXTM3U" in playlist_text
@@ -206,10 +219,154 @@ def test_cli_loudness_processing_uses_exported_copy_paths_not_sources(tmp_path, 
 
     assert destination.is_file()
     assert sha256(source) == source_hash_before
-    assert observed_measurement_paths == [destination.resolve(strict=False)]
+    assert observed_measurement_paths == [
+        destination.resolve(strict=False),
+        destination.resolve(strict=False),
+    ]
     assert observed_normalization_paths == [destination.resolve(strict=False)]
     assert source.resolve(strict=False) not in observed_measurement_paths
     assert source.resolve(strict=False) not in observed_normalization_paths
+
+
+def test_resolved_integrated_loudness_warning_is_preserved_as_input_warning_only(tmp_path, monkeypatch):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    output_dir = tmp_path / "export"
+    warning = "No integrated loudness value is available yet."
+    job = write_job(
+        tmp_path,
+        [
+            {
+                "position": 1,
+                "source_path": str(source),
+                "output_filename": "tone.wav",
+                "artist": "Artist",
+                "title": "Tone",
+                "warnings": [{"message": warning}],
+            }
+        ],
+    )
+
+    def fake_measure_loudness_first_pass(**kwargs):
+        return SimpleNamespace(
+            success=True,
+            status="measured",
+            input_i=-20.0,
+            input_tp=-2.0,
+            input_lra=3.0,
+            input_thresh=-30.0,
+            target_offset=0.5,
+            return_code=0,
+            stderr_summary="",
+            errors=[],
+            ffmpeg=kwargs.get("ffmpeg"),
+        )
+
+    def fake_normalize_loudness_second_pass(**kwargs):
+        exported = Path(kwargs["exported_path"]).resolve(strict=False)
+        return SimpleNamespace(
+            success=True,
+            status="normalized",
+            output_path=str(exported),
+            return_code=0,
+            stderr_summary="",
+            errors=[],
+            ffmpeg=kwargs.get("ffmpeg"),
+        )
+
+    monkeypatch.setattr("ppb.cli.measure_loudness_first_pass", fake_measure_loudness_first_pass)
+    monkeypatch.setattr("ppb.cli.normalize_loudness_second_pass", fake_normalize_loudness_second_pass)
+
+    main(["--input", str(job), "--out", str(output_dir), "--no-create-subfolder"])
+
+    report = read_report(output_dir)
+    assert f"track 1: {warning}" in report["input_warnings"]
+    assert f"track 1: {warning}" not in report["warnings"]
+    assert report["tracks"][0]["input_warnings"] == [warning]
+
+    report_text = (output_dir / "export_report.txt").read_text(encoding="utf-8")
+    warnings_section = report_text.split("\nWarnings\n", 1)[1].split("\nErrors\n", 1)[0]
+    assert warning not in warnings_section
+    assert "None" in warnings_section
+
+
+def test_successful_conversion_ffmpeg_stderr_is_not_logged_as_error(tmp_path, monkeypatch):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    output_dir = tmp_path / "export"
+    job = write_job(
+        tmp_path,
+        [
+            {
+                "position": 1,
+                "source_path": str(source),
+                "output_filename": "converted.mp3",
+                "artist": "Artist",
+                "title": "Tone",
+            }
+        ],
+        normalize_loudness=False,
+        output_format="mp3",
+    )
+
+    def fake_convert_audio_file(**kwargs):
+        Path(kwargs["destination_path"]).write_bytes(b"converted bytes")
+        return SimpleNamespace(
+            ok=True,
+            status="converted",
+            target_format="mp3",
+            errors=[],
+            warnings=[],
+            returncode=0,
+            stderr_summary="ffmpeg progress line on stderr",
+        )
+
+    monkeypatch.setattr("ppb.copier.convert_audio_file", fake_convert_audio_file)
+
+    main(["--input", str(job), "--out", str(output_dir), "--no-create-subfolder"])
+
+    report = read_report(output_dir)
+    assert report["tracks"][0]["ffmpeg_stderr_summary"] == "ffmpeg progress line on stderr"
+
+    log_text = (output_dir / "export.log").read_text(encoding="utf-8")
+    stderr_lines = [line for line in log_text.splitlines() if "ffmpeg stderr summary" in line]
+    assert stderr_lines
+    assert all(" ERROR " not in line for line in stderr_lines)
+    assert any(" INFO " in line for line in stderr_lines)
+
+
+def test_write_tags_true_reports_not_implemented_without_writing_tags(tmp_path):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    source_hash_before = sha256(source)
+    output_dir = tmp_path / "export"
+    job = write_job(
+        tmp_path,
+        [
+            {
+                "position": 1,
+                "source_path": str(source),
+                "output_filename": "tone.wav",
+                "artist": "Artist",
+                "title": "Tone",
+            }
+        ],
+        normalize_loudness=False,
+        write_tags=True,
+    )
+
+    main(["--input", str(job), "--out", str(output_dir), "--no-create-subfolder"])
+
+    assert sha256(source) == source_hash_before
+    report = read_report(output_dir)
+    assert report["tags_status"] == "not_implemented"
+    assert report["tags_reason"] == "Tag writing is not implemented yet."
+    assert report["tracks"][0]["tags_status"] == "not_implemented"
+    assert report["tracks"][0]["tags_reason"] == "Tag writing is not implemented yet."
+
+    report_text = (output_dir / "export_report.txt").read_text(encoding="utf-8")
+    assert "Status: not_implemented" in report_text
+    assert "Tag writing is not implemented yet." in report_text
 
 
 def test_cli_skip_loudness_records_skips_and_keeps_exported_audio(tmp_path):

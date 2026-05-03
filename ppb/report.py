@@ -46,6 +46,16 @@ RESOLVED_INTEGRATED_LOUDNESS_WARNING = "No integrated loudness value is availabl
 TAGS_STATUS_NOT_REQUESTED = "not_requested"
 TAGS_STATUS_NOT_IMPLEMENTED = "not_implemented"
 TAGS_NOT_IMPLEMENTED_REASON = "Tag writing is not implemented yet."
+TAG_STATUS_WRITTEN = "written"
+TAG_STATUS_SKIPPED = "skipped"
+TAG_STATUS_FAILED = "failed"
+TAG_STATUS_UNSUPPORTED_FORMAT = "unsupported_format"
+TAG_STATUSES = {
+    TAG_STATUS_WRITTEN,
+    TAG_STATUS_SKIPPED,
+    TAG_STATUS_FAILED,
+    TAG_STATUS_UNSUPPORTED_FORMAT,
+}
 LOUDNESS_FIELD_DEFAULTS: dict[str, Any] = {
     "loudness_status": LOUDNESS_STATUS_SKIPPED,
     "input_i": None,
@@ -75,6 +85,13 @@ LOUDNESS_FIELD_DEFAULTS: dict[str, Any] = {
     "size_after_export_before_loudness": None,
     "size_after_loudness": None,
     "final_size": None,
+}
+TAG_FIELD_DEFAULTS: dict[str, Any] = {
+    "tag_status": TAG_STATUS_SKIPPED,
+    "tag_format": None,
+    "tag_written_fields": [],
+    "tag_warnings": [],
+    "tag_error": None,
 }
 
 
@@ -192,6 +209,8 @@ def export_report_to_dict(
     log_path: Path | str | None = None,
     session_id: str | None = None,
     write_tags_requested: bool = False,
+    tag_results: list[dict[str, Any]] | None = None,
+    tag_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return the JSON payload for the real export-stage report."""
 
@@ -212,7 +231,14 @@ def export_report_to_dict(
     loudness_totals = _count_loudness_statuses(normalized_loudness_results)
     loudness_verification_totals = _count_post_loudness_statuses(normalized_loudness_results)
     errors.extend(_collect_loudness_errors(copy_result, normalized_loudness_results))
-    tags = _tags_metadata_to_dict(write_tags_requested)
+    normalized_tag_results = _normalize_tag_results(copy_result, tag_results)
+    warnings.extend(_collect_tag_warnings(copy_result, normalized_tag_results))
+    errors.extend(_collect_tag_errors(copy_result, normalized_tag_results))
+    tags = _tags_metadata_to_dict(
+        write_tags_requested,
+        tag_summary=tag_summary,
+        normalized_tag_results=normalized_tag_results,
+    )
 
     report = {
         "format": "physical_playlist_export_report.v1",
@@ -239,13 +265,18 @@ def export_report_to_dict(
         "tags": tags,
         "tags_status": tags["status"],
         "tags_reason": tags["reason"],
+        "tag_totals": tags["totals"],
         "input_warnings": input_warnings,
         "pre_export_warnings": input_warnings,
         "warnings": warnings,
         "errors": errors,
         "tracks": [
-            _copy_track_result_to_dict(result, loudness, write_tags_requested=write_tags_requested)
-            for result, loudness in zip(copy_result.results, normalized_loudness_results)
+            _copy_track_result_to_dict(result, loudness, tag)
+            for result, loudness, tag in zip(
+                copy_result.results,
+                normalized_loudness_results,
+                normalized_tag_results,
+            )
         ],
         "report_txt_path": str(report_txt_path) if report_txt_path is not None else None,
         "log_path": str(log_path) if log_path is not None else None,
@@ -270,6 +301,8 @@ def write_export_report(
     log_path: Path | str | None = None,
     session_id: str | None = None,
     write_tags_requested: bool = False,
+    tag_results: list[dict[str, Any]] | None = None,
+    tag_summary: dict[str, Any] | None = None,
 ) -> Path:
     """Write ``export_report.json`` with per-track export-stage results."""
 
@@ -290,6 +323,8 @@ def write_export_report(
                 log_path=log_path,
                 session_id=session_id,
                 write_tags_requested=write_tags_requested,
+                tag_results=tag_results,
+                tag_summary=tag_summary,
             ),
             ensure_ascii=False,
             indent=2,
@@ -312,6 +347,8 @@ def write_export_report_text(
     report_json_path: Path | str | None = None,
     log_path: Path | str | None = None,
     write_tags_requested: bool = False,
+    tag_results: list[dict[str, Any]] | None = None,
+    tag_summary: dict[str, Any] | None = None,
 ) -> Path:
     """Write a human-readable export report for a completed real run."""
 
@@ -329,7 +366,13 @@ def write_export_report_text(
         loudness_verification_totals=_count_post_loudness_statuses(normalized_loudness_results),
     )
     verification_totals = loudness_metadata.get("verification_totals", {})
-    tags = _tags_metadata_to_dict(write_tags_requested)
+    normalized_tag_results = _normalize_tag_results(copy_result, tag_results)
+    tags = _tags_metadata_to_dict(
+        write_tags_requested,
+        tag_summary=tag_summary,
+        normalized_tag_results=normalized_tag_results,
+    )
+    tag_totals = tags.get("totals", {})
     lines: list[str] = [
         "Physical Playlist Builder Export Report",
         "=" * 40,
@@ -362,10 +405,17 @@ def write_export_report_text(
         f"Post-normalization verified: {verification_totals.get('verified', 0)}",
         f"Post-normalization verification failed: {verification_totals.get('verification_failed', 0)}",
         "",
-        "Tags",
+        "Tag Writing",
         "-" * 40,
         f"Status: {tags['status']}",
         f"Reason: {tags['reason'] or '(none)'}",
+        f"Requested: {'yes' if tags.get('requested') else 'no'}",
+        f"Skip tags: {'yes' if tags.get('skip_tags') else 'no'}",
+        f"ID3 version: {tags.get('id3_version') or '(none)'}",
+        f"Written: {tag_totals.get(TAG_STATUS_WRITTEN, 0)}",
+        f"Skipped: {tag_totals.get(TAG_STATUS_SKIPPED, 0)}",
+        f"Failed: {tag_totals.get(TAG_STATUS_FAILED, 0)}",
+        f"Unsupported format: {tag_totals.get(TAG_STATUS_UNSUPPORTED_FORMAT, 0)}",
         "",
         "M3U8",
         "-" * 40,
@@ -393,6 +443,7 @@ def write_export_report_text(
         copy_result.results,
         normalized_loudness_results,
     )
+    _append_tag_issue_section(lines, copy_result.results, normalized_tag_results)
     if summary.get(STATUS_NOT_IMPLEMENTED, 0):
         _append_track_section(
             lines,
@@ -421,6 +472,8 @@ def write_export_report_text(
         warnings.extend(m3u_result.warnings)
         errors.extend(m3u_result.errors)
     errors.extend(_collect_loudness_errors(copy_result, normalized_loudness_results))
+    warnings.extend(_collect_tag_warnings(copy_result, normalized_tag_results))
+    errors.extend(_collect_tag_errors(copy_result, normalized_tag_results))
     _append_message_section(lines, "Input Warnings", input_warnings)
     _append_message_section(lines, "Warnings", warnings)
     _append_message_section(lines, "Errors", errors)
@@ -606,39 +659,124 @@ def _loudness_summary_to_dict(
     return summary
 
 
-def _tags_metadata_to_dict(write_tags_requested: bool) -> dict[str, Any]:
+def _normalize_tag_results(
+    copy_result: CopyStageResult,
+    tag_results: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    if tag_results is None:
+        return [
+            _tag_result_with_defaults(
+                {
+                    "tag_status": TAG_STATUS_SKIPPED,
+                    "tag_warnings": ["tag writing result was not provided."],
+                }
+            )
+            for _result in copy_result.results
+        ]
+
+    normalized: list[dict[str, Any]] = []
+    for index, _result in enumerate(copy_result.results):
+        if index < len(tag_results):
+            normalized.append(_tag_result_with_defaults(tag_results[index]))
+        else:
+            normalized.append(
+                _tag_result_with_defaults(
+                    {
+                        "tag_status": TAG_STATUS_SKIPPED,
+                        "tag_warnings": ["tag writing result is missing."],
+                    }
+                )
+            )
+    return normalized
+
+
+def _tag_result_with_defaults(data: dict[str, Any]) -> dict[str, Any]:
+    result = dict(TAG_FIELD_DEFAULTS)
+    result.update(data)
+    status = str(result.get("tag_status") or TAG_STATUS_SKIPPED)
+    if status not in TAG_STATUSES:
+        status = TAG_STATUS_FAILED
+        result["tag_error"] = "Unknown tag-writing status in report data."
+    result["tag_status"] = status
+    result["tag_written_fields"] = list(result.get("tag_written_fields") or [])
+    result["tag_warnings"] = list(result.get("tag_warnings") or [])
+    if result.get("tag_error") is not None:
+        result["tag_error"] = str(result["tag_error"])
+    return result
+
+
+def _count_tag_statuses(tag_results: list[dict[str, Any]]) -> dict[str, int]:
+    totals = {
+        TAG_STATUS_WRITTEN: 0,
+        TAG_STATUS_SKIPPED: 0,
+        TAG_STATUS_FAILED: 0,
+        TAG_STATUS_UNSUPPORTED_FORMAT: 0,
+        "total": len(tag_results),
+    }
+    for result in tag_results:
+        status = str(result.get("tag_status") or TAG_STATUS_SKIPPED)
+        if status not in totals:
+            status = TAG_STATUS_FAILED
+        totals[status] += 1
+    return totals
+
+
+def _tags_metadata_to_dict(
+    write_tags_requested: bool,
+    *,
+    tag_summary: dict[str, Any] | None = None,
+    normalized_tag_results: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    default_totals = _count_tag_statuses(normalized_tag_results or [])
+    if tag_summary is not None:
+        tags = dict(tag_summary)
+        tags["requested"] = bool(tags.get("requested", write_tags_requested))
+        tags["status"] = str(tags.get("status") or TAG_STATUS_SKIPPED)
+        tags["reason"] = tags.get("reason")
+        tags["totals"] = dict(tags.get("totals") or default_totals)
+        return tags
+
     if not write_tags_requested:
         return {
             "requested": False,
-            "status": TAGS_STATUS_NOT_REQUESTED,
+            "skip_tags": False,
+            "enabled": False,
+            "id3_version": None,
+            "eligible_track_count": 0,
+            "status": TAG_STATUS_SKIPPED,
             "reason": None,
+            "totals": default_totals,
         }
     return {
         "requested": True,
+        "skip_tags": False,
+        "enabled": False,
+        "id3_version": None,
+        "eligible_track_count": 0,
         "status": TAGS_STATUS_NOT_IMPLEMENTED,
         "reason": TAGS_NOT_IMPLEMENTED_REASON,
+        "totals": default_totals,
     }
 
 
 def _copy_track_result_to_dict(
     result: CopyTrackResult,
     loudness_result: dict[str, Any],
-    *,
-    write_tags_requested: bool = False,
+    tag_result: dict[str, Any],
 ) -> dict[str, Any]:
     data = asdict(result)
     data["input_warnings"] = list(result.warnings)
     data["pre_export_warnings"] = list(result.warnings)
     data.update(loudness_result)
+    data.update(tag_result)
     if data.get("size_after_export_before_loudness") is None:
         data["size_after_export_before_loudness"] = result.destination_size
     if data.get("final_size") is None:
         data["final_size"] = result.destination_size
     if data.get("size_after_loudness") is None and data.get("loudness_normalization_status") == LOUDNESS_STATUS_NORMALIZED:
         data["size_after_loudness"] = data.get("final_size")
-    tags = _tags_metadata_to_dict(write_tags_requested)
-    data["tags_status"] = tags["status"]
-    data["tags_reason"] = tags["reason"]
+    data["tags_status"] = data["tag_status"]
+    data["tags_reason"] = data["tag_error"]
     return data
 
 
@@ -675,6 +813,36 @@ def _collect_loudness_errors(
             errors.append(
                 f"track {result.position} post-normalization loudness verification {post_status}: {detail}"
             )
+    return errors
+
+
+def _collect_tag_warnings(
+    copy_result: CopyStageResult,
+    tag_results: list[dict[str, Any]],
+) -> list[str]:
+    warnings: list[str] = []
+    for result, tags in zip(copy_result.results, tag_results):
+        if tags.get("tag_status") == TAG_STATUS_WRITTEN:
+            for warning in tags.get("tag_warnings") or []:
+                if warning:
+                    warnings.append(f"track {result.position} tag writing: {warning}")
+        if tags.get("tag_status") == TAG_STATUS_UNSUPPORTED_FORMAT and tags.get("tag_error"):
+            warnings.append(
+                f"track {result.position} tag writing unsupported_format: {tags['tag_error']}"
+            )
+    return warnings
+
+
+def _collect_tag_errors(
+    copy_result: CopyStageResult,
+    tag_results: list[dict[str, Any]],
+) -> list[str]:
+    errors: list[str] = []
+    for result, tags in zip(copy_result.results, tag_results):
+        if tags.get("tag_status") != TAG_STATUS_FAILED:
+            continue
+        detail = tags.get("tag_error") or "tag writing failed without details."
+        errors.append(f"track {result.position} tag writing failed: {detail}")
     return errors
 
 
@@ -804,6 +972,35 @@ def _append_loudness_verification_failure_section(
             lines.append("  verification stderr summary:")
             for line in str(stderr_summary).splitlines():
                 lines.append(f"    {line}")
+    lines.append("")
+
+
+def _append_tag_issue_section(
+    lines: list[str],
+    results: list[CopyTrackResult],
+    tag_results: list[dict[str, Any]],
+) -> None:
+    lines.extend(["Tag Writing Issues", "-" * 40])
+    matching = [
+        (result, tags)
+        for result, tags in zip(results, tag_results)
+        if tags.get("tag_status") in {TAG_STATUS_FAILED, TAG_STATUS_UNSUPPORTED_FORMAT}
+    ]
+    if not matching:
+        lines.extend(["None", ""])
+        return
+    for result, tags in matching:
+        lines.append(
+            f"track {result.position}: tag_status={tags.get('tag_status')} | "
+            f"format={tags.get('tag_format') or '(unknown)'} | "
+            f"{result.expected_output_filename or '(no output filename)'} | "
+            f"destination={result.destination_path or '(no destination)'}"
+        )
+        error = tags.get("tag_error")
+        if error:
+            lines.append(f"  tag error: {error}")
+        for warning in tags.get("tag_warnings") or []:
+            lines.append(f"  tag warning: {warning}")
     lines.append("")
 
 

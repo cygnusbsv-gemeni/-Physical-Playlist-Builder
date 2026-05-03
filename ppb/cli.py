@@ -3,7 +3,8 @@
 This stage validates neutral playlist input, prints a dry-run operation plan,
 creates a safe output folder, copies or converts planned source files into it,
 optionally normalizes loudness for those exported copies, and then generates an
-M3U8 playlist from the final exported files. It does not write tags.
+M3U8 playlist from the final exported files. When requested by the job, it
+writes normalized tags only to final exported copies before reports and M3U8.
 """
 
 from __future__ import annotations
@@ -50,6 +51,18 @@ from ppb.report import (
     write_dry_run_report,
     write_export_report,
     write_export_report_text,
+    TAG_STATUS_FAILED,
+    TAG_STATUS_SKIPPED,
+    TAG_STATUS_UNSUPPORTED_FORMAT,
+    TAG_STATUS_WRITTEN,
+)
+from ppb.tags import (
+    ID3_VERSION_V23,
+    ID3_VERSION_V24,
+    STATUS_NO_SUPPORTED_FIELDS as TAG_HELPER_STATUS_NO_SUPPORTED_FIELDS,
+    STATUS_UNSUPPORTED_FORMAT as TAG_HELPER_STATUS_UNSUPPORTED_FORMAT,
+    STATUS_WRITTEN as TAG_HELPER_STATUS_WRITTEN,
+    write_tags_to_exported_file,
 )
 
 
@@ -145,6 +158,20 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Skip loudness measurement and normalization during real export."
         ),
+    )
+    parser.add_argument(
+        "--skip-tags",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip tag writing during real export, even when settings.write_tags is true."
+        ),
+    )
+    parser.add_argument(
+        "--id3-version",
+        choices=[ID3_VERSION_V23, ID3_VERSION_V24],
+        default=ID3_VERSION_V24,
+        help="ID3 version for MP3 tag writing. Default: v24.",
     )
     return parser
 
@@ -319,6 +346,17 @@ def print_loudness_summary(loudness_summary: dict[str, Any]) -> None:
     )
 
 
+def print_tag_summary(tag_summary: dict[str, Any]) -> None:
+    totals = tag_summary.get("totals", {})
+    print(
+        "[output] Tag writing: "
+        f"written={totals.get(TAG_STATUS_WRITTEN, 0)} "
+        f"skipped={totals.get(TAG_STATUS_SKIPPED, 0)} "
+        f"failed={totals.get(TAG_STATUS_FAILED, 0)} "
+        f"unsupported_format={totals.get(TAG_STATUS_UNSUPPORTED_FORMAT, 0)}"
+    )
+
+
 def print_final_export_summary(
     *,
     final_output_dir: Path | str,
@@ -389,6 +427,99 @@ def log_m3u_details(logger, m3u_result) -> None:
         logger.warning("m3u warning: %s", warning)
     for error in m3u_result.errors:
         logger.error("m3u error: %s", error)
+
+
+def run_tag_writing_stage(
+    *,
+    job,
+    copy_result,
+    final_output_dir: Path | str,
+    skip_tags: bool,
+    id3_version: str,
+    logger,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    output_dir = Path(final_output_dir).resolve(strict=False)
+    write_tags_requested = bool(job.settings.write_tags)
+    eligible_count = sum(
+        1
+        for result in copy_result.results
+        if result.status in {STATUS_COPIED, STATUS_CONVERTED}
+    )
+    should_write = write_tags_requested and not skip_tags
+    reason = _tag_skip_reason(
+        write_tags_requested=write_tags_requested,
+        skip_tags=skip_tags,
+        eligible_count=eligible_count,
+    )
+    results: list[dict[str, Any]] = []
+
+    logger.info(
+        "tag writing started: enabled=%s requested=%s skip_tags=%s eligible=%s id3_version=%s reason=%s",
+        should_write,
+        write_tags_requested,
+        skip_tags,
+        eligible_count,
+        id3_version,
+        reason or "(none)",
+    )
+
+    for index, track_result in enumerate(copy_result.results):
+        track = job.tracks[index] if index < len(job.tracks) else None
+        if track_result.status not in {STATUS_COPIED, STATUS_CONVERTED}:
+            tag_result = _tag_skipped_result(
+                "track was not successfully exported; tag writing was skipped."
+            )
+            results.append(tag_result)
+            _log_tag_track_result(logger, track_result, tag_result)
+            continue
+
+        if not should_write:
+            tag_result = _tag_skipped_result(reason or "tag writing skipped.")
+            results.append(tag_result)
+            _log_tag_track_result(logger, track_result, tag_result)
+            continue
+
+        destination_error = _validate_tag_destination(track_result.destination_path, output_dir)
+        if destination_error is not None:
+            tag_result = _tag_failed_result(destination_error)
+            results.append(tag_result)
+            _log_tag_track_result(logger, track_result, tag_result)
+            continue
+
+        metadata = _track_tag_metadata(track)
+        helper_result = write_tags_to_exported_file(
+            file_path=Path(track_result.destination_path).resolve(strict=False),
+            final_output_dir=output_dir,
+            metadata=metadata,
+            id3_version=id3_version,
+        )
+        tag_result = _tag_helper_result_to_report(helper_result)
+        results.append(tag_result)
+        _log_tag_track_result(logger, track_result, tag_result)
+
+    totals = _count_tag_results(results)
+    summary = {
+        "requested": write_tags_requested,
+        "skip_tags": skip_tags,
+        "enabled": should_write,
+        "id3_version": id3_version,
+        "eligible_track_count": eligible_count,
+        "status": _tag_stage_status(
+            should_write=should_write,
+            eligible_count=eligible_count,
+            totals=totals,
+        ),
+        "reason": reason,
+        "totals": totals,
+    }
+    logger.info(
+        "tag writing completed: written=%s skipped=%s failed=%s unsupported_format=%s",
+        totals.get(TAG_STATUS_WRITTEN, 0),
+        totals.get(TAG_STATUS_SKIPPED, 0),
+        totals.get(TAG_STATUS_FAILED, 0),
+        totals.get(TAG_STATUS_UNSUPPORTED_FORMAT, 0),
+    )
+    return results, summary
 
 
 def run_loudness_measurement_stage(
@@ -1063,6 +1194,156 @@ def _loudness_stage_status(
     return LOUDNESS_STATUS_MEASURED
 
 
+def _tag_skip_reason(
+    *,
+    write_tags_requested: bool,
+    skip_tags: bool,
+    eligible_count: int,
+) -> str | None:
+    if skip_tags:
+        return "--skip-tags was passed."
+    if not write_tags_requested:
+        return "settings.write_tags is false or missing."
+    if eligible_count == 0:
+        return "no successfully exported files were eligible for tag writing."
+    return None
+
+
+def _validate_tag_destination(destination_path: str | None, output_dir: Path) -> str | None:
+    if not destination_path:
+        return "Successful export result has no destination path to tag."
+    destination = Path(destination_path).resolve(strict=False)
+    if destination == output_dir or not _is_relative_to(destination, output_dir):
+        return f"Refused tag writing outside final output folder: {destination}"
+    if not destination.is_file():
+        return f"Exported destination file is missing during tag writing: {destination}"
+    return None
+
+
+def _track_tag_metadata(track) -> dict[str, Any]:
+    if track is None:
+        return {}
+    fields = ("title", "artist", "album", "albumartist", "tracknumber", "date", "year", "genre")
+    return {
+        field_name: value
+        for field_name in fields
+        if (value := getattr(track, field_name, None)) is not None
+    }
+
+
+def _tag_skipped_result(reason: str, *, tag_format: str | None = None) -> dict[str, Any]:
+    return {
+        "tag_status": TAG_STATUS_SKIPPED,
+        "tag_format": tag_format,
+        "tag_written_fields": [],
+        "tag_warnings": [reason],
+        "tag_error": None,
+    }
+
+
+def _tag_failed_result(error: str, *, tag_format: str | None = None) -> dict[str, Any]:
+    return {
+        "tag_status": TAG_STATUS_FAILED,
+        "tag_format": tag_format,
+        "tag_written_fields": [],
+        "tag_warnings": [],
+        "tag_error": error,
+    }
+
+
+def _tag_helper_result_to_report(helper_result) -> dict[str, Any]:
+    warnings = list(helper_result.warnings)
+    error = helper_result.error
+
+    if helper_result.success and helper_result.status == TAG_HELPER_STATUS_WRITTEN:
+        status = TAG_STATUS_WRITTEN
+        error = None
+    elif helper_result.status == TAG_HELPER_STATUS_UNSUPPORTED_FORMAT:
+        status = TAG_STATUS_UNSUPPORTED_FORMAT
+    elif helper_result.status == TAG_HELPER_STATUS_NO_SUPPORTED_FIELDS:
+        status = TAG_STATUS_SKIPPED
+        if error:
+            warnings.append(error)
+        error = None
+    else:
+        status = TAG_STATUS_FAILED
+
+    return {
+        "tag_status": status,
+        "tag_format": helper_result.tag_format,
+        "tag_written_fields": list(helper_result.written_fields),
+        "tag_warnings": warnings,
+        "tag_error": error,
+    }
+
+
+def _log_tag_track_result(logger, track_result, tag_result: dict[str, Any]) -> None:
+    status = tag_result.get("tag_status")
+    if status == TAG_STATUS_WRITTEN:
+        logger.info(
+            "track %s tag written: format=%s fields=%s",
+            track_result.position,
+            tag_result.get("tag_format") or "(unknown)",
+            ", ".join(tag_result.get("tag_written_fields") or []) or "(none)",
+        )
+        return
+    if status == TAG_STATUS_SKIPPED:
+        logger.info(
+            "track %s tag skipped: %s",
+            track_result.position,
+            "; ".join(tag_result.get("tag_warnings") or []) or "tag writing skipped.",
+        )
+        return
+    if status == TAG_STATUS_UNSUPPORTED_FORMAT:
+        logger.info(
+            "track %s tag skipped: unsupported_format: %s",
+            track_result.position,
+            tag_result.get("tag_error") or "unsupported tag-writing format.",
+        )
+        return
+
+    logger.error(
+        "track %s tag failed: %s",
+        track_result.position,
+        tag_result.get("tag_error") or "tag writing failed.",
+    )
+
+
+def _count_tag_results(results: list[dict[str, Any]]) -> dict[str, int]:
+    totals = {
+        TAG_STATUS_WRITTEN: 0,
+        TAG_STATUS_SKIPPED: 0,
+        TAG_STATUS_FAILED: 0,
+        TAG_STATUS_UNSUPPORTED_FORMAT: 0,
+        "total": len(results),
+    }
+    for result in results:
+        status = str(result.get("tag_status") or TAG_STATUS_SKIPPED)
+        if status not in totals:
+            status = TAG_STATUS_FAILED
+        totals[status] += 1
+    return totals
+
+
+def _tag_stage_status(
+    *,
+    should_write: bool,
+    eligible_count: int,
+    totals: dict[str, int],
+) -> str:
+    if not should_write or eligible_count == 0:
+        return TAG_STATUS_SKIPPED
+    if totals.get(TAG_STATUS_FAILED, 0):
+        if totals.get(TAG_STATUS_WRITTEN, 0) or totals.get(TAG_STATUS_UNSUPPORTED_FORMAT, 0):
+            return "completed_with_failures"
+        return TAG_STATUS_FAILED
+    if totals.get(TAG_STATUS_WRITTEN, 0):
+        return TAG_STATUS_WRITTEN
+    if totals.get(TAG_STATUS_UNSUPPORTED_FORMAT, 0):
+        return TAG_STATUS_UNSUPPORTED_FORMAT
+    return TAG_STATUS_SKIPPED
+
+
 def _is_relative_to(path: Path, parent: Path) -> bool:
     try:
         path.relative_to(parent)
@@ -1179,6 +1460,14 @@ def main(argv: list[str] | None = None) -> None:
             audio_bitrate=args.audio_bitrate,
             logger=logger,
         )
+        tag_results, tag_summary = run_tag_writing_stage(
+            job=result.job,
+            copy_result=copy_result,
+            final_output_dir=output_result.final_output_dir,
+            skip_tags=args.skip_tags,
+            id3_version=args.id3_version,
+            logger=logger,
+        )
         report_path = Path(output_result.final_output_dir) / EXPORT_REPORT_FILENAME
         report_txt_path = Path(output_result.final_output_dir) / EXPORT_REPORT_TEXT_FILENAME
         m3u_result = generate_m3u8_playlist(
@@ -1214,6 +1503,8 @@ def main(argv: list[str] | None = None) -> None:
                 report_txt_path=report_txt_path,
                 log_path=log_path,
                 write_tags_requested=result.job.settings.write_tags,
+                tag_results=tag_results,
+                tag_summary=tag_summary,
             )
             write_export_report_text(
                 copy_result,
@@ -1227,6 +1518,8 @@ def main(argv: list[str] | None = None) -> None:
                 report_json_path=report_path,
                 log_path=log_path,
                 write_tags_requested=result.job.settings.write_tags,
+                tag_results=tag_results,
+                tag_summary=tag_summary,
             )
             update_export_session_copy_summary(
                 session_path=output_result.export_session_path,
@@ -1246,6 +1539,7 @@ def main(argv: list[str] | None = None) -> None:
         )
         print_copy_summary(copy_result)
         print_loudness_summary(loudness_summary)
+        print_tag_summary(tag_summary)
         if m3u_result.status == M3U_STATUS_GENERATED:
             print(
                 f"[output] M3U8 written: {m3u_result.m3u_path} "

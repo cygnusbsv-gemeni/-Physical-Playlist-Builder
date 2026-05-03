@@ -434,6 +434,8 @@ def write_export_report_text(
         "",
     ]
     if resume["resume_requested"]:
+        comparison = resume.get("resume_comparison") or {}
+        comparison_totals = comparison.get("totals") or {}
         lines.extend(
             [
                 "Resume Preflight",
@@ -442,9 +444,20 @@ def write_export_report_text(
                 f"State found: {'yes' if resume['resume_state_found'] else 'no'}",
                 f"export_session.json found: {'yes' if resume['resume_session_found'] else 'no'}",
                 f"export_report.json found: {'yes' if resume['resume_report_found'] else 'no'}",
-                "Mode: preflight-only; prior track statuses are not reused in B12.1.",
+                "Mode: comparison-only; prior track statuses are not reused in B12.2.",
                 f"Warnings: {len(resume['resume_warnings'])}",
                 f"Errors: {len(resume['resume_errors'])}",
+                "",
+                "Resume Comparison",
+                "-" * 40,
+                "Mode: comparison-only; candidates do not affect this export run.",
+                f"Candidates total: {comparison_totals.get('candidates_total', 0)}",
+                f"Safe-to-reuse candidates: {comparison_totals.get('safe_to_reuse_candidates', 0)}",
+                f"Unsafe candidates: {comparison_totals.get('unsafe_candidates', 0)}",
+                f"Missing prior results: {comparison_totals.get('missing_prior_results', 0)}",
+                f"Existing output files: {comparison_totals.get('existing_output_files', 0)}",
+                f"Size matches: {comparison_totals.get('size_matches', 0)}",
+                f"Size mismatches: {comparison_totals.get('size_mismatches', 0)}",
                 "",
             ]
         )
@@ -545,7 +558,14 @@ def _resume_metadata_to_dict(resume_metadata: dict[str, Any] | None) -> dict[str
     data.update(
         {
             key: resume_metadata.get(key, default[key])
-            for key in default
+            for key in (
+                "resume_requested",
+                "resume_state_found",
+                "resume_session_found",
+                "resume_report_found",
+                "resume_warnings",
+                "resume_errors",
+            )
         }
     )
     data["resume_requested"] = bool(data["resume_requested"])
@@ -554,7 +574,51 @@ def _resume_metadata_to_dict(resume_metadata: dict[str, Any] | None) -> dict[str
     data["resume_report_found"] = bool(data["resume_report_found"])
     data["resume_warnings"] = [str(value) for value in data["resume_warnings"] or []]
     data["resume_errors"] = [str(value) for value in data["resume_errors"] or []]
+    data["resume_comparison"] = _resume_comparison_to_dict(
+        resume_metadata.get("resume_comparison")
+    )
+    data["resume_comparison_totals"] = data["resume_comparison"]["totals"]
     return data
+
+
+def _resume_comparison_to_dict(value: Any) -> dict[str, Any]:
+    totals_default = {
+        "candidates_total": 0,
+        "safe_to_reuse_candidates": 0,
+        "unsafe_candidates": 0,
+        "missing_prior_results": 0,
+        "existing_output_files": 0,
+        "size_matches": 0,
+        "size_mismatches": 0,
+    }
+    if not isinstance(value, dict):
+        return {
+            "mode": "not_requested",
+            "applies_to_execution": False,
+            "totals": totals_default,
+            "warnings": [],
+            "candidates": [],
+        }
+
+    totals = dict(totals_default)
+    raw_totals = value.get("totals")
+    if isinstance(raw_totals, dict):
+        for key in totals:
+            try:
+                totals[key] = int(raw_totals.get(key, totals[key]))
+            except (TypeError, ValueError):
+                totals[key] = totals_default[key]
+
+    candidates = value.get("candidates")
+    warnings = value.get("warnings")
+    return {
+        "mode": str(value.get("mode") or "comparison_only"),
+        "applies_to_execution": bool(value.get("applies_to_execution")),
+        "final_output_dir": value.get("final_output_dir"),
+        "totals": totals,
+        "warnings": [str(item) for item in warnings] if isinstance(warnings, list) else [],
+        "candidates": candidates if isinstance(candidates, list) else [],
+    }
 
 
 def _m3u_metadata_to_dict(m3u_result: M3UGenerationResult | None) -> dict[str, Any]:

@@ -56,7 +56,7 @@ from ppb.report import (
     TAG_STATUS_UNSUPPORTED_FORMAT,
     TAG_STATUS_WRITTEN,
 )
-from ppb.resume import ResumeState, discover_resume_state
+from ppb.resume import ResumeState, build_resume_comparison, discover_resume_state
 from ppb.tags import (
     ID3_VERSION_V23,
     ID3_VERSION_V24,
@@ -114,7 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help=(
             "Load prior export_session.json/export_report.json from the selected final output "
-            "folder for preflight reporting only. Requires --no-create-subfolder."
+            "folder for preflight comparison planning only. Requires --no-create-subfolder."
         ),
     )
     parser.add_argument(
@@ -219,7 +219,7 @@ def print_job_summary(
     print(f"  Create subfolder: {'YES' if create_subfolder else 'NO'}")
     print(f"  Overwrite existing non-empty output: {'YES' if overwrite else 'NO'}")
     if resume:
-        print("  Resume requested: YES - preflight-only, no files will be skipped or reused")
+        print("  Resume requested: YES - comparison-only, no files will be skipped or reused")
     print(
         "  Dry-run mode: "
         + (
@@ -340,7 +340,7 @@ def print_resume_preflight(resume_state: ResumeState) -> None:
     print(f"  export_session.json found: {'YES' if resume_state.session_found else 'NO'}")
     print(f"  export_report.json found: {'YES' if resume_state.report_found else 'NO'}")
     print(f"  Prior state loaded: {'YES' if resume_state.state_found else 'NO'}")
-    print("  B12.1 mode: preflight-only; prior track statuses are not reused.")
+    print("  B12.2 mode: comparison-only; prior track statuses are not reused.")
     print(f"  Warnings: {len(resume_state.warnings)}")
     print(f"  Errors: {len(resume_state.errors)}")
     print("=" * 52)
@@ -348,6 +348,26 @@ def print_resume_preflight(resume_state: ResumeState) -> None:
         print(f"  [warning] {warning}")
     for error in resume_state.errors:
         print(f"  [error] {error}")
+    print()
+
+
+def print_resume_comparison(resume_state: ResumeState) -> None:
+    comparison = resume_state.comparison or {}
+    totals = comparison.get("totals") or {}
+    print("=" * 52)
+    print("  Resume Comparison")
+    print("=" * 52)
+    print("  Mode: comparison-only; no files will be skipped or reused")
+    print(f"  Candidates total: {totals.get('candidates_total', 0)}")
+    print(f"  Safe-to-reuse candidates: {totals.get('safe_to_reuse_candidates', 0)}")
+    print(f"  Unsafe candidates: {totals.get('unsafe_candidates', 0)}")
+    print(f"  Missing prior results: {totals.get('missing_prior_results', 0)}")
+    print(f"  Existing output files: {totals.get('existing_output_files', 0)}")
+    print(f"  Size matches: {totals.get('size_matches', 0)}")
+    print(f"  Size mismatches: {totals.get('size_mismatches', 0)}")
+    print("=" * 52)
+    for warning in comparison.get("warnings") or []:
+        print(f"  [warning] {warning}")
     print()
 
 
@@ -429,6 +449,13 @@ def print_final_export_summary(
             f"warnings={len(resume_state.warnings)} "
             f"errors={len(resume_state.errors)}"
         )
+        comparison_totals = (resume_state.comparison or {}).get("totals") or {}
+        print(
+            "  Resume comparison: "
+            f"safe={comparison_totals.get('safe_to_reuse_candidates', 0)} "
+            f"unsafe={comparison_totals.get('unsafe_candidates', 0)} "
+            "execution=unchanged"
+        )
     print("=" * 52)
 
 
@@ -476,7 +503,7 @@ def log_m3u_details(logger, m3u_result) -> None:
 
 
 def log_resume_preflight(logger, resume_state: ResumeState) -> None:
-    logger.info("resume requested: preflight-only")
+    logger.info("resume requested: comparison-only")
     logger.info(
         "resume preflight files: session_found=%s report_found=%s state_found=%s",
         resume_state.session_found,
@@ -497,6 +524,27 @@ def log_resume_preflight(logger, resume_state: ResumeState) -> None:
         logger.warning("resume preflight warning: %s", warning)
     for error in resume_state.errors:
         logger.error("resume preflight error: %s", error)
+
+
+def log_resume_comparison(logger, resume_state: ResumeState) -> None:
+    comparison = resume_state.comparison or {}
+    totals = comparison.get("totals") or {}
+    logger.info("resume comparison started: mode=comparison_only")
+    logger.info("resume comparison totals: %s", totals)
+
+    unsafe_reasons: dict[str, int] = {}
+    for candidate in comparison.get("candidates") or []:
+        if candidate.get("safe_to_reuse_candidate"):
+            continue
+        reason = str(candidate.get("reason") or "unknown unsafe reason.")
+        unsafe_reasons[reason] = unsafe_reasons.get(reason, 0) + 1
+    if not unsafe_reasons:
+        logger.info("resume comparison unsafe reasons: none")
+    for reason, count in sorted(unsafe_reasons.items(), key=lambda item: (-item[1], item[0])):
+        logger.warning("resume comparison unsafe reason (%s): %s", count, reason)
+
+    for warning in comparison.get("warnings") or []:
+        logger.warning("resume comparison warning: %s", warning)
 
 
 def run_tag_writing_stage(
@@ -1527,6 +1575,14 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit(4)
         resume_state = discover_resume_state(target.final_output_dir)
 
+    plan = build_dry_run_plan(result.job, target.final_output_dir)
+    if resume_state is not None:
+        build_resume_comparison(
+            resume_state=resume_state,
+            plan=plan,
+            final_output_dir=target.final_output_dir,
+        )
+
     print_job_summary(
         input_result,
         target.final_output_dir,
@@ -1537,7 +1593,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     if resume_state is not None:
         print_resume_preflight(resume_state)
-    plan = build_dry_run_plan(result.job, target.final_output_dir)
+        print_resume_comparison(resume_state)
 
     if args.dry_run:
         print_dry_run_plan(plan)
@@ -1569,6 +1625,7 @@ def main(argv: list[str] | None = None) -> None:
         logger.info("output folder created: %s", output_result.final_output_dir)
         if resume_state is not None:
             log_resume_preflight(logger, resume_state)
+            log_resume_comparison(logger, resume_state)
         print(f"[output] Folder ready: {output_result.final_output_dir}")
         print(f"[output] Export session written: {output_result.export_session_path}")
         copy_result = run_copy_stage(

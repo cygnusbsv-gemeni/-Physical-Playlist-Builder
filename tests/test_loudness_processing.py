@@ -335,7 +335,7 @@ def test_successful_conversion_ffmpeg_stderr_is_not_logged_as_error(tmp_path, mo
     assert any(" INFO " in line for line in stderr_lines)
 
 
-def test_write_tags_true_reports_not_implemented_without_writing_tags(tmp_path):
+def test_write_tags_true_reports_unsupported_format_for_wav_without_crashing(tmp_path):
     source = tmp_path / "sources" / "tone.wav"
     write_sine_wav(source)
     source_hash_before = sha256(source)
@@ -359,14 +359,14 @@ def test_write_tags_true_reports_not_implemented_without_writing_tags(tmp_path):
 
     assert sha256(source) == source_hash_before
     report = read_report(output_dir)
-    assert report["tags_status"] == "not_implemented"
-    assert report["tags_reason"] == "Tag writing is not implemented yet."
-    assert report["tracks"][0]["tags_status"] == "not_implemented"
-    assert report["tracks"][0]["tags_reason"] == "Tag writing is not implemented yet."
+    assert report["tags_status"] == "unsupported_format"
+    assert report["tracks"][0]["tags_status"] == "unsupported_format"
+    assert report["tracks"][0]["tag_error"]
+    assert "Unsupported tag-writing file type" in report["tracks"][0]["tag_error"]
 
     report_text = (output_dir / "export_report.txt").read_text(encoding="utf-8")
-    assert "Status: not_implemented" in report_text
-    assert "Tag writing is not implemented yet." in report_text
+    assert "Status: unsupported_format" in report_text
+    assert "Unsupported format: 1" in report_text
 
 
 def test_cli_skip_loudness_records_skips_and_keeps_exported_audio(tmp_path):

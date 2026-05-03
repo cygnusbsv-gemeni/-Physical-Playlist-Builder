@@ -6,15 +6,15 @@
 
 ## Current Stage
 
-B11.2 - Tag writing integrated into the real export workflow.
+B11.3 - Focused tag-writing tests and hardening.
 
-The project validates neutral playlist input, builds a dry-run plan, creates a safe output folder, writes `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert` through `ppb/ffmpeg_tools.py`, measures loudness for successfully exported final output files when `settings.normalize_loudness=true`, normalizes those exported copies with ffmpeg `loudnorm` second pass, verifies loudness again after successful normalization, writes normalized tags to final exported copies when `settings.write_tags=true` and `--skip-tags` is not passed, generates a UTF-8 `playlist.m3u8` from final copied/converted files, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. Tags are written only to successfully exported files inside the final output folder and only from normalized job metadata. Resume is still not implemented.
+The project keeps the B11.2 runtime behavior: it validates neutral playlist input, builds a dry-run plan, creates a safe output folder, writes `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert` through `ppb/ffmpeg_tools.py`, measures loudness for successfully exported final output files when `settings.normalize_loudness=true`, normalizes those exported copies with ffmpeg `loudnorm` second pass, verifies loudness again after successful normalization, writes normalized tags to final exported copies when `settings.write_tags=true` and `--skip-tags` is not passed, generates a UTF-8 `playlist.m3u8` from final copied/converted files, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. B11.3 adds focused pytest coverage and regression hardening for MP3/FLAC/M4A tag writing, skip paths, unsupported final formats, helper path safety, and per-track tag failures. Resume is still not implemented.
 
 ## Project File Map
 
 | File path | Responsibility | Important notes |
 |---|---|---|
-| `README.md` | Project documentation and usage instructions | Must describe only implemented behavior. Updated for B11.2 tag workflow, CLI options, safety rules, limitations, and focused validation commands. |
+| `README.md` | Project documentation and usage instructions | Must describe only implemented behavior. Updated for B11.3 focused tag-writing coverage, validation commands, safety rules, and current limitations. |
 | `PROJECT_FILES.md` | File map, current stage changes, and generated/runtime file notes | Updated after each completed stage. |
 | `requirements.txt` | Python/test dependencies | Includes `pytest` for tests and `mutagen` for tag writing. |
 | `ppb/__init__.py` | Package marker | No runtime logic. |
@@ -30,25 +30,26 @@ The project validates neutral playlist input, builds a dry-run plan, creates a s
 | `ppb/ffmpeg_tools.py` | Isolated ffmpeg executable resolution, single-file conversion helper, low-level loudness measurement helper, and low-level loudness normalization helper | Resolves ffmpeg from `PATH` or an explicit path, validates with `ffmpeg -version`, converts one source file into one destination inside an explicit output folder, removes a failed partial destination only when that file did not exist before the failed run, preserves sample rate by default, supports mp3/flac/wav/m4a/aac helper-level targets, measures loudness via read-only ffmpeg loudnorm first pass for exported copies, and normalizes exported copies via loudnorm second pass using safe temporary files inside the final output folder. The CLI also reuses the measurement helper for post-normalization verification. |
 | `ppb/tags.py` | Isolated tag-writing helper for exported copies | Provides `TagWriteResult` and `write_tags_to_exported_file()` for one already-exported file inside `final_output_dir`; supports MP3 ID3v2.3/ID3v2.4, FLAC VorbisComment, and M4A/MP4 metadata atoms through mutagen; ignores `source_path` metadata and is called by the CLI only for final exported copies. |
 | `ppb/m3u.py` | M3U8 generation | Writes UTF-8 `playlist.m3u8` from successfully copied and converted files and sanitizes EXTINF text safely. |
-| `DOC/physical_playlist_job_v1_contract.md` | External neutral JSON contract documentation | Contract was not changed in B11.2. |
-| `DOC/examples/playlist_job.v1.canonical.json` | Canonical sample job | Not edited in B11.2. |
-| `example_playlist_job.json` | Additional sample job | Not edited in B11.2. |
-| `tests/test_cli_u1.py` | CLI smoke/regression tests from earlier stages | Includes focused CLI copy-stage regression using only temporary files and output folders. Not changed in B11.2. |
+| `DOC/physical_playlist_job_v1_contract.md` | External neutral JSON contract documentation | Contract was not changed in B11.3. |
+| `DOC/examples/playlist_job.v1.canonical.json` | Canonical sample job | Not edited in B11.3. |
+| `example_playlist_job.json` | Additional sample job | Not edited in B11.3. |
+| `tests/test_cli_u1.py` | CLI smoke/regression tests from earlier stages | Includes focused CLI copy-stage regression using only temporary files and output folders. Not changed in B11.3. |
 | `tests/test_copier.py` | Focused copy-stage tests | Covers copy success, unchanged sources, export report serialization, missing sources, blocked tracks, convert failure/ffmpeg-missing behavior for invalid fixture audio, and destination conflict behavior. |
-| `tests/test_ffmpeg_conversion.py` | Focused B9.3 conversion tests | Uses only pytest temporary folders and synthetic WAV files from Python stdlib `wave`; covers successful WAV to MP3 conversion when ffmpeg is available, ffmpeg missing, ffmpeg failure, destination conflicts, overwrite, reports, logs, M3U8 behavior, and source immutability. Not changed in B11.2. |
-| `tests/test_loudness_processing.py` | Focused loudness tests | Uses only pytest temporary folders and synthetic audio. Not changed in B11.2 because broad tag workflow test hardening is planned for B11.3. |
-| `tests/test_validator_u2.py` | Validator tests | Not edited in B11.2. |
-| `tests/test_input_readers_u3.py` | Input reader tests | Not edited in B11.2. |
-| `tests/test_planner_u4.py` | Planner tests | Not edited in B11.2. |
+| `tests/test_ffmpeg_conversion.py` | Focused B9.3 conversion tests | Uses only pytest temporary folders and synthetic WAV files from Python stdlib `wave`; covers successful WAV to MP3 conversion when ffmpeg is available, ffmpeg missing, ffmpeg failure, destination conflicts, overwrite, reports, logs, M3U8 behavior, and source immutability. Not changed in B11.3. |
+| `tests/test_loudness_processing.py` | Focused loudness tests | Uses only pytest temporary folders and synthetic audio. In B11.3 one stale tag expectation was updated from `not_implemented` to the current `unsupported_format` behavior for WAV outputs. |
+| `tests/test_tag_writing.py` | Focused B11.3 tag-writing tests | Uses only synthetic audio and temporary files; covers MP3 ID3v2.4/v2.3, FLAC VorbisComment, M4A/MP4, `write_tags=false`, `--skip-tags`, unsupported WAV, path safety, skipped non-exported tracks, preserved playlist paths, and per-track tag failures. |
+| `tests/test_validator_u2.py` | Validator tests | Not edited in B11.3. |
+| `tests/test_input_readers_u3.py` | Input reader tests | Not edited in B11.3. |
+| `tests/test_planner_u4.py` | Planner tests | Not edited in B11.3. |
 
 ## Current Stage Changes
 
 | File path | Reason for change |
 |---|---|
-| `ppb/cli.py` | Added `--skip-tags` and `--id3-version`, integrated tag writing after copy/conversion/loudness and before M3U8/report completion, records per-track tag results, and logs tag-writing start/per-track/completion events. |
-| `ppb/report.py` | Added tag result normalization, per-track `tag_status`/`tag_format`/`tag_written_fields`/`tag_warnings`/`tag_error`, `tag_totals`, structured `tags` metadata, and a human-readable tag-writing section. |
-| `README.md` | Updated current implemented state, CLI options, workflow, reports/logs, safety rules, limitations, next stage, and focused B11.2 validation commands. |
-| `PROJECT_FILES.md` | Updated the stage description, file map, current-stage changes, generated file notes, and safety notes for B11.2. |
+| `tests/test_tag_writing.py` | Added focused B11.3 pytest coverage for helper and CLI tag-writing behavior using only synthetic audio and temporary files. |
+| `tests/test_loudness_processing.py` | Updated one stale regression to match the implemented B11.2/B11.3 WAV tag result `unsupported_format`. |
+| `README.md` | Updated the current stage, focused B11.3 validation commands, and the next-stage note. |
+| `PROJECT_FILES.md` | Updated the stage description, file map, current-stage changes, generated file notes, and safety notes for B11.3. |
 
 ## Generated/Runtime Files
 
@@ -66,7 +67,8 @@ These files and folders are generated during local runs and should not be edited
 | `.<track>.ppb-loudnorm-*.tmp<ext>` inside `<final_output_dir>/` | Temporary loudness normalization output created only during an active normalization attempt. It is replaced into the exported copy on success or removed on failure; it should not be edited manually. |
 | `test_runtime/` | Test runtime workspace; ignored by git. |
 | `C:\Temp\project_pytest\` | Recommended external pytest temp root for Windows/YandexDisk runs when available. |
-| `C:\Temp\project_pytest\ppb_b11_2_smoke\` | Optional external temp folder used by the B11.2 synthetic tag-writing smoke command. |
+| `C:\Temp\project_pytest\b11_3\` | Recommended external temp folder for focused B11.3 tag-writing tests. |
+| `C:\Temp\project_pytest\b11_3_regression\` | Recommended external temp folder for the focused B11.3 regression subset. |
 | `.pytest_cache/` | Pytest cache; ignored by git. |
 | `__pycache__/` | Python bytecode cache; ignored by git. |
 
@@ -92,4 +94,4 @@ These files and folders are generated during local runs and should not be edited
 - `ppb/tags.py` uses only the provided normalized metadata dict, ignores `source_path` metadata, and never reads or modifies source audio files.
 - The main CLI workflow calls `ppb/tags.py` only after copy/conversion/loudness, only for `copied` or `converted` track results with destination files inside the final output folder, and only when `settings.write_tags=true` and `--skip-tags` is not passed.
 - Per-track tag failures keep the exported audio file and are recorded in `export_report.json`, `export_report.txt`, and `export.log`.
-- Resume is still not implemented in B11.2.
+- Resume is still not implemented in B11.3.

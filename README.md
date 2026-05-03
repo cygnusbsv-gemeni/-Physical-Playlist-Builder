@@ -6,7 +6,7 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: B11.2 integrates tag writing into the real export workflow. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, measures and normalizes loudness for successfully exported output files when requested, writes normalized tags to final exported copies when `settings.write_tags=true`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. Tag writing happens only after copy/conversion/loudness, only for successfully exported files inside the final output folder, and never reads or modifies source audio files. Resume and bundled ffmpeg are not implemented.
+Current stage: B11.3 keeps the B11.2 tag-writing workflow and adds focused tag-writing coverage/hardening. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, measures and normalizes loudness for successfully exported output files when requested, writes normalized tags to final exported copies when `settings.write_tags=true`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. Tag writing happens only after copy/conversion/loudness, only for successfully exported files inside the final output folder, and never reads or modifies source audio files. Focused pytest coverage now exercises MP3 ID3v2.4/ID3v2.3, FLAC, M4A/MP4 when available, skipped-tag paths, unsupported final formats, helper path safety, and per-track tag failure handling. Resume and bundled ffmpeg are not implemented.
 
 ## Supported Input Types
 
@@ -323,7 +323,7 @@ Example generated files after a real run:
 
 ## Tag Writing
 
-`ppb/tags.py` provides `write_tags_to_exported_file()` for one exported audio file at a time. B11.2 calls this helper from the main CLI workflow after copy/conversion/loudness and before M3U8/report completion. The helper requires:
+`ppb/tags.py` provides `write_tags_to_exported_file()` for one exported audio file at a time. The main CLI workflow calls this helper after copy/conversion/loudness and before M3U8/report completion. The helper requires:
 
 - `file_path`: the already-exported file to tag;
 - `final_output_dir`: the final output folder safety boundary;
@@ -410,16 +410,17 @@ pip install -r requirements.txt
 pytest tests/
 ```
 
-Focused B11.2 checks:
+Focused B11.3 checks:
 
 ```bash
 python -m ppb.cli --help
 python -m py_compile ppb\cli.py ppb\report.py ppb\tags.py
 python -m pip show mutagen
-python -m ppb.cli --input <temp_playlist_job.json> --out <temp_out> --id3-version v24
+python -m pytest tests\test_tag_writing.py -vv --tb=short --basetemp C:\Temp\project_pytest\b11_3 -p no:cacheprovider
+python -m pytest tests\test_loudness_processing.py tests\test_ffmpeg_conversion.py tests\test_copier.py tests\test_cli_u1.py -q --basetemp C:\Temp\project_pytest\b11_3_regression -p no:cacheprovider
 ```
 
-If `C:\Temp` is not writable in the local environment, use another explicit pytest temp directory outside the repository when possible. The focused conversion and loudness tests generate synthetic WAV fixtures with Python standard library `wave`; they do not use real user music files. Tests that require real ffmpeg conversion or loudness normalization skip cleanly when ffmpeg is not available, while ffmpeg-missing coverage still runs with an invalid explicit `--ffmpeg` path.
+If `C:\Temp` is not writable in the local environment, use another explicit pytest temp directory outside the repository when possible. The focused conversion, loudness, and tag tests generate synthetic WAV fixtures with Python standard library `wave`; they do not use real user music files. Tests that require real ffmpeg conversion, M4A creation, or loudness normalization skip cleanly when ffmpeg is not available, while ffmpeg-missing coverage still runs with an invalid explicit `--ffmpeg` path.
 
 ## Current Limitations
 
@@ -436,4 +437,4 @@ If `C:\Temp` is not writable in the local environment, use another explicit pyte
 
 ## Next Stage
 
-Next stage is not implemented yet. A logical next step after B11.2 is focused B11.3 test/hardening coverage for tag-writing workflow edge cases. Resume remains not implemented.
+Next stage is not implemented yet. A logical next step after B11.3 is resume-safe export recovery or another narrowly scoped export-stage hardening pass. Resume remains not implemented.

@@ -211,6 +211,7 @@ def export_report_to_dict(
     write_tags_requested: bool = False,
     tag_results: list[dict[str, Any]] | None = None,
     tag_summary: dict[str, Any] | None = None,
+    resume_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return the JSON payload for the real export-stage report."""
 
@@ -239,6 +240,9 @@ def export_report_to_dict(
         tag_summary=tag_summary,
         normalized_tag_results=normalized_tag_results,
     )
+    resume = _resume_metadata_to_dict(resume_metadata)
+    warnings.extend(resume["resume_warnings"])
+    errors.extend(resume["resume_errors"])
 
     report = {
         "format": "physical_playlist_export_report.v1",
@@ -281,6 +285,7 @@ def export_report_to_dict(
         "report_txt_path": str(report_txt_path) if report_txt_path is not None else None,
         "log_path": str(log_path) if log_path is not None else None,
     }
+    report.update(resume)
     report.update(_m3u_metadata_to_dict(m3u_result))
     return report
 
@@ -303,6 +308,7 @@ def write_export_report(
     write_tags_requested: bool = False,
     tag_results: list[dict[str, Any]] | None = None,
     tag_summary: dict[str, Any] | None = None,
+    resume_metadata: dict[str, Any] | None = None,
 ) -> Path:
     """Write ``export_report.json`` with per-track export-stage results."""
 
@@ -325,6 +331,7 @@ def write_export_report(
                 write_tags_requested=write_tags_requested,
                 tag_results=tag_results,
                 tag_summary=tag_summary,
+                resume_metadata=resume_metadata,
             ),
             ensure_ascii=False,
             indent=2,
@@ -349,6 +356,7 @@ def write_export_report_text(
     write_tags_requested: bool = False,
     tag_results: list[dict[str, Any]] | None = None,
     tag_summary: dict[str, Any] | None = None,
+    resume_metadata: dict[str, Any] | None = None,
 ) -> Path:
     """Write a human-readable export report for a completed real run."""
 
@@ -373,6 +381,7 @@ def write_export_report_text(
         normalized_tag_results=normalized_tag_results,
     )
     tag_totals = tags.get("totals", {})
+    resume = _resume_metadata_to_dict(resume_metadata)
     lines: list[str] = [
         "Physical Playlist Builder Export Report",
         "=" * 40,
@@ -424,6 +433,21 @@ def write_export_report_text(
         f"Track count: {m3u_result.track_count if m3u_result is not None else 0}",
         "",
     ]
+    if resume["resume_requested"]:
+        lines.extend(
+            [
+                "Resume Preflight",
+                "-" * 40,
+                "Requested: yes",
+                f"State found: {'yes' if resume['resume_state_found'] else 'no'}",
+                f"export_session.json found: {'yes' if resume['resume_session_found'] else 'no'}",
+                f"export_report.json found: {'yes' if resume['resume_report_found'] else 'no'}",
+                "Mode: preflight-only; prior track statuses are not reused in B12.1.",
+                f"Warnings: {len(resume['resume_warnings'])}",
+                f"Errors: {len(resume['resume_errors'])}",
+                "",
+            ]
+        )
 
     _append_track_section(
         lines,
@@ -474,6 +498,8 @@ def write_export_report_text(
     errors.extend(_collect_loudness_errors(copy_result, normalized_loudness_results))
     warnings.extend(_collect_tag_warnings(copy_result, normalized_tag_results))
     errors.extend(_collect_tag_errors(copy_result, normalized_tag_results))
+    warnings.extend(resume["resume_warnings"])
+    errors.extend(resume["resume_errors"])
     _append_message_section(lines, "Input Warnings", input_warnings)
     _append_message_section(lines, "Warnings", warnings)
     _append_message_section(lines, "Errors", errors)
@@ -501,6 +527,34 @@ def update_export_session_copy_summary(
     handoff["copy_summary"] = copy_result.summary
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
+
+
+def _resume_metadata_to_dict(resume_metadata: dict[str, Any] | None) -> dict[str, Any]:
+    default = {
+        "resume_requested": False,
+        "resume_state_found": False,
+        "resume_session_found": False,
+        "resume_report_found": False,
+        "resume_warnings": [],
+        "resume_errors": [],
+    }
+    if resume_metadata is None:
+        return default
+
+    data = dict(default)
+    data.update(
+        {
+            key: resume_metadata.get(key, default[key])
+            for key in default
+        }
+    )
+    data["resume_requested"] = bool(data["resume_requested"])
+    data["resume_state_found"] = bool(data["resume_state_found"])
+    data["resume_session_found"] = bool(data["resume_session_found"])
+    data["resume_report_found"] = bool(data["resume_report_found"])
+    data["resume_warnings"] = [str(value) for value in data["resume_warnings"] or []]
+    data["resume_errors"] = [str(value) for value in data["resume_errors"] or []]
+    return data
 
 
 def _m3u_metadata_to_dict(m3u_result: M3UGenerationResult | None) -> dict[str, Any]:

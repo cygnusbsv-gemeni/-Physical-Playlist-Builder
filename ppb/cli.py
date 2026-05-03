@@ -56,6 +56,7 @@ from ppb.report import (
     TAG_STATUS_UNSUPPORTED_FORMAT,
     TAG_STATUS_WRITTEN,
 )
+from ppb.resume import ResumeState, discover_resume_state
 from ppb.tags import (
     ID3_VERSION_V23,
     ID3_VERSION_V24,
@@ -106,6 +107,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Validate and summarize without creating or modifying files.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        default=False,
+        help=(
+            "Load prior export_session.json/export_report.json from the selected final output "
+            "folder for preflight reporting only. Requires --no-create-subfolder."
+        ),
     )
     parser.add_argument(
         "--strict",
@@ -176,7 +186,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def print_job_summary(input_result, out_dir: Path, dry_run: bool, create_subfolder: bool, overwrite: bool) -> None:
+def print_job_summary(
+    input_result,
+    out_dir: Path,
+    dry_run: bool,
+    create_subfolder: bool,
+    overwrite: bool,
+    resume: bool = False,
+) -> None:
     result = input_result.validation
     print("=" * 52)
     print("  Physical Playlist Builder - Job Summary")
@@ -201,6 +218,8 @@ def print_job_summary(input_result, out_dir: Path, dry_run: bool, create_subfold
     print(f"  Output folder: {out_dir}")
     print(f"  Create subfolder: {'YES' if create_subfolder else 'NO'}")
     print(f"  Overwrite existing non-empty output: {'YES' if overwrite else 'NO'}")
+    if resume:
+        print("  Resume requested: YES - preflight-only, no files will be skipped or reused")
     print(
         "  Dry-run mode: "
         + (
@@ -313,6 +332,25 @@ def print_dry_run_plan(plan) -> None:
     print()
 
 
+def print_resume_preflight(resume_state: ResumeState) -> None:
+    print("=" * 52)
+    print("  Resume Preflight")
+    print("=" * 52)
+    print(f"  Final output folder: {resume_state.final_output_dir}")
+    print(f"  export_session.json found: {'YES' if resume_state.session_found else 'NO'}")
+    print(f"  export_report.json found: {'YES' if resume_state.report_found else 'NO'}")
+    print(f"  Prior state loaded: {'YES' if resume_state.state_found else 'NO'}")
+    print("  B12.1 mode: preflight-only; prior track statuses are not reused.")
+    print(f"  Warnings: {len(resume_state.warnings)}")
+    print(f"  Errors: {len(resume_state.errors)}")
+    print("=" * 52)
+    for warning in resume_state.warnings:
+        print(f"  [warning] {warning}")
+    for error in resume_state.errors:
+        print(f"  [error] {error}")
+    print()
+
+
 def print_copy_progress(index: int, total: int, result: CopyTrackResult) -> None:
     filename = result.expected_output_filename or Path(result.source_path).name or "(no filename)"
     print(f"[export] {index}/{total} {result.status}: {filename}")
@@ -365,6 +403,7 @@ def print_final_export_summary(
     report_path: Path | str,
     report_txt_path: Path | str,
     log_path: Path | str,
+    resume_state: ResumeState | None = None,
 ) -> None:
     summary = copy_result.summary
     print("=" * 52)
@@ -383,6 +422,13 @@ def print_final_export_summary(
     print(f"  export_report.json: {report_path}")
     print(f"  export_report.txt: {report_txt_path}")
     print(f"  export.log: {log_path}")
+    if resume_state is not None:
+        print(
+            "  Resume preflight: "
+            f"state_found={'YES' if resume_state.state_found else 'NO'} "
+            f"warnings={len(resume_state.warnings)} "
+            f"errors={len(resume_state.errors)}"
+        )
     print("=" * 52)
 
 
@@ -427,6 +473,30 @@ def log_m3u_details(logger, m3u_result) -> None:
         logger.warning("m3u warning: %s", warning)
     for error in m3u_result.errors:
         logger.error("m3u error: %s", error)
+
+
+def log_resume_preflight(logger, resume_state: ResumeState) -> None:
+    logger.info("resume requested: preflight-only")
+    logger.info(
+        "resume preflight files: session_found=%s report_found=%s state_found=%s",
+        resume_state.session_found,
+        resume_state.report_found,
+        resume_state.state_found,
+    )
+    logger.info(
+        "prior export_session.json %s: %s",
+        "found" if resume_state.session_found else "missing",
+        resume_state.session_path,
+    )
+    logger.info(
+        "prior export_report.json %s: %s",
+        "found" if resume_state.report_found else "missing",
+        resume_state.report_path,
+    )
+    for warning in resume_state.warnings:
+        logger.warning("resume preflight warning: %s", warning)
+    for error in resume_state.errors:
+        logger.error("resume preflight error: %s", error)
 
 
 def run_tag_writing_stage(
@@ -1358,6 +1428,11 @@ def main(argv: list[str] | None = None) -> None:
     run_started_at = datetime.now(timezone.utc).isoformat()
     if args.report and not args.dry_run:
         parser.error("--report requires --dry-run")
+    if args.resume and args.create_subfolder:
+        parser.error(
+            "--resume requires an explicit existing final output folder. "
+            "Pass --no-create-subfolder and set --out to the prior export folder."
+        )
     try:
         m3u_name = validate_m3u_filename(args.m3u_name)
     except ValueError as exc:
@@ -1376,11 +1451,25 @@ def main(argv: list[str] | None = None) -> None:
     result = input_result.validation
 
     if result.fatal_errors:
-        print_job_summary(input_result, Path(args.out), args.dry_run, args.create_subfolder, args.overwrite)
+        print_job_summary(
+            input_result,
+            Path(args.out),
+            args.dry_run,
+            args.create_subfolder,
+            args.overwrite,
+            args.resume,
+        )
         sys.exit(2)
 
     if not result.ok:
-        print_job_summary(input_result, Path(args.out), args.dry_run, args.create_subfolder, args.overwrite)
+        print_job_summary(
+            input_result,
+            Path(args.out),
+            args.dry_run,
+            args.create_subfolder,
+            args.overwrite,
+            args.resume,
+        )
         print(
             f"[strict] Validation failed: {result.blocked_count} blocked track(s). "
             "Run without --strict to allow blocked tracks to be skipped later.",
@@ -1395,9 +1484,48 @@ def main(argv: list[str] | None = None) -> None:
             create_subfolder=args.create_subfolder,
         )
     except OutputFolderError as exc:
-        print_job_summary(input_result, Path(args.out), args.dry_run, args.create_subfolder, args.overwrite)
+        print_job_summary(
+            input_result,
+            Path(args.out),
+            args.dry_run,
+            args.create_subfolder,
+            args.overwrite,
+            args.resume,
+        )
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(4)
+
+    resume_state: ResumeState | None = None
+    if args.resume:
+        if not target.final_output_dir.exists():
+            print_job_summary(
+                input_result,
+                target.final_output_dir,
+                args.dry_run,
+                args.create_subfolder,
+                args.overwrite,
+                args.resume,
+            )
+            print(
+                "ERROR: --resume requires --out to point to an existing final output folder.",
+                file=sys.stderr,
+            )
+            sys.exit(4)
+        if not target.final_output_dir.is_dir():
+            print_job_summary(
+                input_result,
+                target.final_output_dir,
+                args.dry_run,
+                args.create_subfolder,
+                args.overwrite,
+                args.resume,
+            )
+            print(
+                "ERROR: --resume requires --out to point to a directory.",
+                file=sys.stderr,
+            )
+            sys.exit(4)
+        resume_state = discover_resume_state(target.final_output_dir)
 
     print_job_summary(
         input_result,
@@ -1405,7 +1533,10 @@ def main(argv: list[str] | None = None) -> None:
         args.dry_run,
         args.create_subfolder,
         args.overwrite,
+        args.resume,
     )
+    if resume_state is not None:
+        print_resume_preflight(resume_state)
     plan = build_dry_run_plan(result.job, target.final_output_dir)
 
     if args.dry_run:
@@ -1420,7 +1551,7 @@ def main(argv: list[str] | None = None) -> None:
                 job=result.job,
                 plan=plan,
                 target=target,
-                overwrite=args.overwrite,
+                overwrite=args.overwrite or args.resume,
                 input_path=input_result.input_path,
                 input_type=input_result.input_type,
             )
@@ -1436,6 +1567,8 @@ def main(argv: list[str] | None = None) -> None:
         logger.info("validation completed")
         log_validation_details(logger, result)
         logger.info("output folder created: %s", output_result.final_output_dir)
+        if resume_state is not None:
+            log_resume_preflight(logger, resume_state)
         print(f"[output] Folder ready: {output_result.final_output_dir}")
         print(f"[output] Export session written: {output_result.export_session_path}")
         copy_result = run_copy_stage(
@@ -1505,6 +1638,9 @@ def main(argv: list[str] | None = None) -> None:
                 write_tags_requested=result.job.settings.write_tags,
                 tag_results=tag_results,
                 tag_summary=tag_summary,
+                resume_metadata=(
+                    resume_state.to_report_metadata() if resume_state is not None else None
+                ),
             )
             write_export_report_text(
                 copy_result,
@@ -1520,6 +1656,9 @@ def main(argv: list[str] | None = None) -> None:
                 write_tags_requested=result.job.settings.write_tags,
                 tag_results=tag_results,
                 tag_summary=tag_summary,
+                resume_metadata=(
+                    resume_state.to_report_metadata() if resume_state is not None else None
+                ),
             )
             update_export_session_copy_summary(
                 session_path=output_result.export_session_path,
@@ -1560,6 +1699,7 @@ def main(argv: list[str] | None = None) -> None:
             report_path=report_path,
             report_txt_path=report_txt_path,
             log_path=log_path,
+            resume_state=resume_state,
         )
         close_export_logger(logger)
         if m3u_result.status == M3U_STATUS_FAILED:

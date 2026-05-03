@@ -1,1 +1,1 @@
-python -m ppb.cli --input norm.json --out .\out --audio-bitrate 320k
+python -m ppb.cli --input run.json --out .\out --audio-bitrate 320k

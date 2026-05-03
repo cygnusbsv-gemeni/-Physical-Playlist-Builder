@@ -6,7 +6,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
-from typing import Callable
+from typing import Any, Callable
 
 from ppb.ffmpeg_tools import (
     DEFAULT_MP3_QUALITY,
@@ -17,6 +17,7 @@ from ppb.ffmpeg_tools import (
     convert_audio_file,
 )
 from ppb.planner import ACTION_CONVERT, ACTION_COPY, ACTION_ERROR, ACTION_SKIP_BLOCKED, DryRunPlan, TrackOperation
+from ppb.resume import resume_candidates_by_track_index
 
 
 STATUS_COPIED = "copied"
@@ -27,6 +28,7 @@ STATUS_SOURCE_MISSING = "source_missing"
 STATUS_DESTINATION_EXISTS = "destination_exists"
 STATUS_FFMPEG_MISSING = "ffmpeg_missing"
 STATUS_NOT_IMPLEMENTED = "not_implemented"
+STATUS_RESUMED = "resumed"
 
 EXPORT_REPORT_FILENAME = "export_report.json"
 
@@ -59,6 +61,10 @@ class CopyTrackResult:
     errors: list[str] = field(default_factory=list)
     ffmpeg_returncode: int | None = None
     ffmpeg_stderr_summary: str = ""
+    resume_reused: bool = False
+    resume_reason: str | None = None
+    resume_prior_status: str | None = None
+    resume_prior_output_path: str | None = None
 
 
 @dataclass
@@ -80,9 +86,20 @@ class CopyStageResult:
             STATUS_DESTINATION_EXISTS: 0,
             STATUS_FFMPEG_MISSING: 0,
             STATUS_NOT_IMPLEMENTED: 0,
+            STATUS_RESUMED: 0,
         }
         for result in self.results:
             counts[result.status] = counts.get(result.status, 0) + 1
+        counts["resume_reuse_skipped_processing"] = sum(
+            1 for result in self.results if result.resume_reused
+        )
+        counts["unsafe_resume_candidates"] = sum(
+            1
+            for result in self.results
+            if result.resume_reason
+            and not result.resume_reused
+            and result.resume_reason.startswith("not a safe resume candidate")
+        )
         counts["total"] = len(self.results)
         return counts
 
@@ -99,6 +116,7 @@ def run_copy_stage(
     mp3_quality: int = DEFAULT_MP3_QUALITY,
     audio_bitrate: int | str | None = None,
     target_format: str | None = None,
+    resume_comparison: dict[str, Any] | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> CopyStageResult:
     """Export planned source files into the already-created final output folder."""
@@ -106,6 +124,8 @@ def run_copy_stage(
     output_dir = Path(final_output_dir).resolve(strict=False)
     stage_result = CopyStageResult(output_dir=str(output_dir), overwrite=overwrite)
     total = len(plan.operations)
+    resume_enabled = resume_comparison is not None
+    resume_candidates = resume_candidates_by_track_index(resume_comparison)
 
     for index, operation in enumerate(plan.operations, start=1):
         result = _run_operation(
@@ -116,6 +136,8 @@ def run_copy_stage(
             mp3_quality=mp3_quality,
             audio_bitrate=audio_bitrate,
             target_format=target_format,
+            resume_enabled=resume_enabled,
+            resume_candidate=resume_candidates.get(index),
         )
         stage_result.results.append(result)
         if progress_callback is not None:
@@ -125,6 +147,41 @@ def run_copy_stage(
 
 
 def _run_operation(
+    operation: TrackOperation,
+    output_dir: Path,
+    *,
+    overwrite: bool,
+    ffmpeg_path: Path | str | None,
+    mp3_quality: int,
+    audio_bitrate: int | str | None,
+    target_format: str | None,
+    resume_enabled: bool = False,
+    resume_candidate: dict[str, Any] | None = None,
+) -> CopyTrackResult:
+    resume_result, resume_reason = _try_resume_operation(
+        operation,
+        output_dir,
+        resume_enabled=resume_enabled,
+        resume_candidate=resume_candidate,
+        target_format=target_format,
+    )
+    if resume_result is not None:
+        return resume_result
+
+    result = _run_operation_without_resume(
+        operation,
+        output_dir,
+        overwrite=overwrite,
+        ffmpeg_path=ffmpeg_path,
+        mp3_quality=mp3_quality,
+        audio_bitrate=audio_bitrate,
+        target_format=target_format,
+    )
+    _apply_resume_not_reused(result, resume_candidate, resume_reason)
+    return result
+
+
+def _run_operation_without_resume(
     operation: TrackOperation,
     output_dir: Path,
     *,
@@ -365,6 +422,10 @@ def _result(
     errors: list[str] | None = None,
     ffmpeg_returncode: int | None = None,
     ffmpeg_stderr_summary: str = "",
+    resume_reused: bool = False,
+    resume_reason: str | None = None,
+    resume_prior_status: str | None = None,
+    resume_prior_output_path: str | None = None,
 ) -> CopyTrackResult:
     return CopyTrackResult(
         position=operation.position,
@@ -381,7 +442,170 @@ def _result(
         errors=errors or [],
         ffmpeg_returncode=ffmpeg_returncode,
         ffmpeg_stderr_summary=ffmpeg_stderr_summary,
+        resume_reused=resume_reused,
+        resume_reason=resume_reason,
+        resume_prior_status=resume_prior_status,
+        resume_prior_output_path=resume_prior_output_path,
     )
+
+
+def _try_resume_operation(
+    operation: TrackOperation,
+    output_dir: Path,
+    *,
+    resume_enabled: bool,
+    resume_candidate: dict[str, Any] | None,
+    target_format: str | None,
+) -> tuple[CopyTrackResult | None, str | None]:
+    if not resume_enabled:
+        return None, None
+    if not isinstance(resume_candidate, dict):
+        return None, "no resume comparison candidate was available; processing normally."
+
+    prior_status = _text_or_none(resume_candidate.get("prior_status"))
+    prior_output_path = _text_or_none(resume_candidate.get("prior_output_path"))
+    if not resume_candidate.get("safe_to_reuse_candidate"):
+        reason = _text_or_none(resume_candidate.get("reason")) or "candidate was not safe."
+        return None, f"not a safe resume candidate: {reason}"
+
+    if operation.planned_action not in {ACTION_COPY, ACTION_CONVERT}:
+        return None, (
+            "safe resume candidate invalid at execution time: "
+            f"current planned action is not reusable: {operation.planned_action}."
+        )
+    if operation.errors:
+        return None, "safe resume candidate invalid at execution time: current operation has errors."
+
+    prior_destination_path = None
+    if prior_output_path:
+        prior_destination_path = _resolve_inside_output(prior_output_path, output_dir)
+        if prior_destination_path is None:
+            return None, (
+                "safe resume candidate invalid at execution time: "
+                "prior output path is outside the selected final output folder."
+            )
+
+    destination_path = _resolve_inside_output(operation.destination_path, output_dir)
+    if destination_path is None:
+        return None, (
+            "safe resume candidate invalid at execution time: "
+            "current planned output path is missing or outside final output folder."
+        )
+    if prior_destination_path is not None and prior_destination_path != destination_path:
+        return None, (
+            "safe resume candidate invalid at execution time: "
+            "prior output path does not match the current planned output path."
+        )
+    if not destination_path.is_file():
+        return None, (
+            "safe resume candidate invalid at execution time: "
+            "planned output file is missing."
+        )
+
+    destination_size = _file_size(destination_path)
+    if destination_size is None:
+        return None, (
+            "safe resume candidate invalid at execution time: "
+            "existing output size is unavailable."
+        )
+
+    source_size = _file_size(Path(operation.source_path)) if operation.source_path else None
+    if operation.planned_action == ACTION_COPY:
+        if source_size is None:
+            return None, (
+                "safe resume candidate invalid at execution time: "
+                "current source file size is unavailable for copy verification."
+            )
+        if source_size != destination_size:
+            return None, (
+                "safe resume candidate invalid at execution time: "
+                "existing output size differs from current source file size."
+            )
+
+    if operation.planned_action == ACTION_CONVERT and destination_size <= 0:
+        return None, (
+            "safe resume candidate invalid at execution time: "
+            "existing converted output file is empty."
+        )
+
+    if prior_status not in {STATUS_COPIED, STATUS_CONVERTED}:
+        return None, (
+            "safe resume candidate invalid at execution time: "
+            f"prior status is not successful: {prior_status or '(missing)'}."
+        )
+
+    return (
+        _result(
+            operation,
+            STATUS_RESUMED,
+            destination_path=str(destination_path),
+            target_format=(
+                _target_format_for_conversion(operation, target_format)
+                if operation.planned_action == ACTION_CONVERT
+                else None
+            ),
+            source_size=source_size,
+            destination_size=destination_size,
+            bytes_copied=0,
+            warnings=list(operation.warnings),
+            errors=list(operation.errors),
+            resume_reused=True,
+            resume_reason=_resume_success_reason(operation.planned_action),
+            resume_prior_status=prior_status,
+            resume_prior_output_path=prior_output_path,
+        ),
+        None,
+    )
+
+
+def _apply_resume_not_reused(
+    result: CopyTrackResult,
+    resume_candidate: dict[str, Any] | None,
+    resume_reason: str | None,
+) -> None:
+    if resume_reason is None:
+        return
+    result.resume_reused = False
+    result.resume_reason = resume_reason
+    if isinstance(resume_candidate, dict):
+        result.resume_prior_status = _text_or_none(resume_candidate.get("prior_status"))
+        result.resume_prior_output_path = _text_or_none(resume_candidate.get("prior_output_path"))
+
+
+def _resume_success_reason(planned_action: str) -> str:
+    if planned_action == ACTION_COPY:
+        return "safe resume candidate reused; existing copy size matches current source size."
+    if planned_action == ACTION_CONVERT:
+        return "safe resume candidate reused; prior conversion succeeded and existing output is present."
+    return "safe resume candidate reused."
+
+
+def _resolve_inside_output(value: str | None, output_dir: Path) -> Path | None:
+    if value in (None, ""):
+        return None
+    try:
+        candidate = Path(str(value)).expanduser().resolve(strict=False)
+    except (OSError, ValueError):
+        return None
+    if candidate == output_dir or not _is_relative_to(candidate, output_dir):
+        return None
+    return candidate
+
+
+def _file_size(path: Path | None) -> int | None:
+    if path is None:
+        return None
+    try:
+        return path.stat().st_size if path.is_file() else None
+    except OSError:
+        return None
+
+
+def _text_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
 
 
 def _target_format_for_conversion(operation: TrackOperation, target_format: str | None) -> str:

@@ -1,4 +1,4 @@
-"""Resume preflight state discovery and comparison planning."""
+"""Resume preflight state discovery, comparison planning, and reuse helpers."""
 
 from __future__ import annotations
 
@@ -141,7 +141,7 @@ def discover_resume_state(final_output_dir: Path | str) -> ResumeState:
         state.warnings.append(f"{EXPORT_REPORT_FILENAME} was not found in {output_dir}.")
     if state.state_found:
         state.warnings.append(
-            "B12.2 resume is comparison-only; prior track statuses are not reused yet."
+            "B12.3 resume may reuse only conservative safe candidates after execution-time validation."
         )
 
     return state
@@ -152,11 +152,13 @@ def build_resume_comparison(
     resume_state: ResumeState,
     plan: DryRunPlan,
     final_output_dir: Path | str,
+    applies_to_execution: bool = True,
 ) -> dict[str, Any]:
     """Compare the current operation plan with prior report results.
 
-    B12.2 produces conservative planning data only. The returned candidates are
-    never consumed by copy/conversion/loudness/tag/M3U8 execution.
+    The returned data is conservative. Real resume execution may consume only
+    candidates marked ``safe_to_reuse_candidate`` and must re-check the file at
+    execution time before skipping any processing.
     """
 
     output_dir = Path(final_output_dir).expanduser().resolve(strict=False)
@@ -167,6 +169,10 @@ def build_resume_comparison(
         _build_candidate(operation, index, prior_index, output_dir)
         for index, operation in enumerate(plan.operations, start=1)
     ]
+    if resume_state.errors:
+        for candidate in candidates:
+            candidate["safe_to_reuse_candidate"] = False
+            candidate["reason"] = "resume preflight has errors; candidate is not reusable."
     totals = _comparison_totals(candidates)
 
     if not resume_state.report_found:
@@ -187,8 +193,8 @@ def build_resume_comparison(
             resume_state.warnings.append(warning)
 
     comparison = {
-        "mode": "comparison_only",
-        "applies_to_execution": False,
+        "mode": "safe_reuse_candidates",
+        "applies_to_execution": bool(applies_to_execution),
         "final_output_dir": str(output_dir),
         "totals": totals,
         "warnings": warnings,
@@ -196,6 +202,28 @@ def build_resume_comparison(
     }
     resume_state.comparison = comparison
     return comparison
+
+
+def resume_candidates_by_track_index(
+    comparison: dict[str, Any] | None,
+) -> dict[int, dict[str, Any]]:
+    """Return resume comparison candidates keyed by 1-based operation index."""
+
+    if not isinstance(comparison, dict):
+        return {}
+    candidates = comparison.get("candidates")
+    if not isinstance(candidates, list):
+        return {}
+
+    indexed: dict[int, dict[str, Any]] = {}
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        track_index = _int_or_none(candidate.get("track_index"))
+        if track_index is None:
+            continue
+        indexed[track_index] = candidate
+    return indexed
 
 
 def _load_json_object(
@@ -399,8 +427,12 @@ def _candidate_decision(
         return False, "current operation has planning errors."
     if current_destination is None:
         return False, "current planned output path is missing or outside final output folder."
-    if prior_output_raw and prior_output_trusted is None:
+    if not prior_output_raw:
+        return False, "prior output path is missing."
+    if prior_output_trusted is None:
         return False, "prior output path is outside the selected final output folder."
+    if _normalize_path_key(current_destination) != _normalize_path_key(prior_output_trusted):
+        return False, "prior output path does not match the current planned output path."
 
     prior_status = _text_or_none(prior.get("status"))
     if prior_status not in PRIOR_SUCCESS_STATUSES:
@@ -438,7 +470,7 @@ def _candidate_decision(
         return (
             True,
             "prior conversion succeeded and existing output file is present; "
-            "converted output size is not compared in B12.2.",
+            "converted output size is not compared for resume reuse.",
         )
 
     return False, "resume comparison is conservative for this operation type."

@@ -6,7 +6,7 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: B12.2 keeps the B11.3 export workflow and extends safe resume preflight with file-level comparison planning. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, measures and normalizes loudness for successfully exported output files when requested, writes normalized tags to final exported copies when `settings.write_tags=true`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. Tag writing happens only after copy/conversion/loudness, only for successfully exported files inside the final output folder, and never reads or modifies source audio files. `--resume` inspects `export_session.json` and `export_report.json` inside an explicit existing final output folder, validates prior metadata, compares the current operation plan with prior per-track results and existing output files, and reports conservative safe/unsafe candidates for a future resume stage. B12.2 does not skip, retry, or reuse prior track results. Bundled ffmpeg is not implemented.
+Current stage: B12.3 keeps the B11.3 export workflow and extends safe resume preflight with actual conservative file reuse. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates or prepares the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, measures and normalizes loudness for newly exported output files when requested, writes normalized tags to newly exported final copies when `settings.write_tags=true`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. Tag writing happens only after copy/conversion/loudness, only for newly exported files inside the final output folder, and never reads or modifies source audio files. `--resume` inspects `export_session.json` and `export_report.json` inside an explicit existing final output folder, validates prior metadata, compares the current operation plan with prior per-track results and existing output files, and reuses only tracks that remain safe at execution time. Reused tracks are reported as `resumed`, are included in `playlist.m3u8`, and are not copied, converted, normalized, or tagged again. Retry, fail-fast behavior, and bundled ffmpeg are not implemented.
 
 ## Supported Input Types
 
@@ -109,7 +109,7 @@ Arguments:
 | `--overwrite` | No | Allow writing `export_session.json` into an existing non-empty final output folder. Default: false. |
 | `--create-subfolder` / `--no-create-subfolder` | No | Create a timestamped playlist subfolder under `--out`. Default: true. |
 | `--dry-run` | No | Validate and summarize without creating or modifying files. |
-| `--resume` | No | Resume preflight and comparison planning. Requires `--no-create-subfolder` and an existing final output folder. Loads only `export_session.json` and `export_report.json` from that folder, reports metadata, and compares the current operation plan with prior per-track results and existing output files. It does not skip or reuse audio files yet. |
+| `--resume` | No | Resume preflight, comparison, and safe reuse. Requires `--no-create-subfolder` and an existing final output folder. Loads only `export_session.json` and `export_report.json` from that folder, compares the current operation plan with prior per-track results and existing output files, then reuses only safe candidates that still validate at execution time. It does not enable `--overwrite`, retry failed tracks, or implement fail-fast behavior. |
 | `--strict` | No | Fail with exit code 3 when any tracks are blocked. |
 | `--report` | No | With `--dry-run`, write a JSON operation report. Passing no value writes `dry_run_report.json`. |
 | `--m3u-name` | No | Safe leaf filename for the generated M3U8 file. Default: `playlist.m3u8`. Absolute paths, separators, traversal, and empty names are rejected. |
@@ -166,9 +166,9 @@ When `--report` is passed, the same plan is written as JSON. No music files or o
 
 With `--resume --dry-run --no-create-subfolder`, the CLI also prints resume preflight and comparison information for the selected existing final output folder. Dry-run still does not create or modify files.
 
-## Resume Preflight And Comparison
+## Resume Preflight, Comparison, And Safe Reuse
 
-B12.2 implements `--resume` as discovery, reporting, and conservative file-level comparison planning only:
+B12.3 implements `--resume` as discovery, reporting, conservative file-level comparison, and actual safe reuse:
 
 ```bash
 python -m ppb.cli --input playlist_job.json --out ./out/Road_Mix_20260503_120000 --no-create-subfolder --resume
@@ -190,15 +190,17 @@ Resume comparison then compares the current operation plan with prior `export_re
 - normalized `source_path` when safe;
 - no MusicLib IDs, database IDs, or producer-specific identifiers.
 
-For each current operation, the comparison records the current action/source/output, any matched prior status/output path, whether an existing output file is present, copy-size match status when comparable, a `safe_to_reuse_candidate` boolean, and a reason. For planned `copy` operations, B12.2 may compare the current source file size with the existing output file size. For planned conversions or files that were loudness-processed/tagged in prior reports, B12.2 stays conservative and only marks candidates safe when the prior status and existing output file look safe.
+For each current operation, the comparison records the current action/source/output, any matched prior status/output path, whether an existing output file is present, copy-size match status when comparable, a `safe_to_reuse_candidate` boolean, and a reason. For planned `copy` operations, B12.3 compares the current source file size with the existing output file size. For planned conversions or files that were loudness-processed/tagged in prior reports, B12.3 stays conservative and only marks candidates safe when the prior status, prior output path, current planned output path, and existing output file all look safe inside the selected final output folder.
 
-The CLI writes resume metadata and comparison data to the new `export_report.json`, adds `Resume Preflight` and `Resume Comparison` sections to `export_report.txt`, and records resume preflight/comparison details in `export.log`.
+During real non-dry-run execution, only candidates with `safe_to_reuse_candidate=true` are considered for reuse. The copy stage re-validates that the current planned destination resolves inside `final_output_dir`, the reused file still exists, the prior output path is inside `final_output_dir`, and copy candidates still match the current source size. If a safe candidate becomes invalid at execution time, it is not reused; the track continues through normal copy/convert behavior and may report `destination_exists` according to the existing overwrite rules.
 
-Limitation: B12.2 does not implement actual resume behavior. Existing per-track statuses are not reused, prior audio files are not skipped, and retry/fail-fast behavior is not implemented yet.
+Reused tracks get status `resumed`, `resume_reused=true`, and resume reason fields in `export_report.json`. They are included in `playlist.m3u8` in playlist order, but they are not copied, converted, normalized, or tagged again. `--resume` does not enable `--overwrite`, does not retry failed tracks as a separate feature, and does not implement fail-fast behavior.
+
+The CLI writes resume metadata, comparison data, and execution totals to the new `export_report.json`, adds `Resume Preflight`, `Resume Comparison`, and `Resume Execution` sections to `export_report.txt`, and records resume preflight/comparison/execution details in `export.log`.
 
 ## Output Folder Creation, Copy, Conversion, Loudness Processing, M3U8, Reporting, And Logging Stage
 
-Run without `--dry-run` to create the safe physical output folder and execute the real export stage:
+Run without `--dry-run` to create or prepare the safe physical output folder and execute the real export stage:
 
 ```bash
 python -m ppb.cli --input playlist_job.json --out ./out
@@ -212,13 +214,13 @@ By default the final output folder is a timestamped subfolder:
 
 The playlist name is sanitized for Windows filenames before the folder is created. Pass `--no-create-subfolder` to use `--out` as the exact final output folder.
 
-The output stage writes `export_session.json` into the final folder. This file records the final output path, the validated job, the dry-run plan, and a handoff field named `handoff.final_output_dir`.
+The output stage writes `export_session.json` into the final folder. This file records the final output path, the validated job, the dry-run plan, and a handoff field named `handoff.final_output_dir`. In `--resume` mode the selected final output folder must already exist, and the stage prepares that explicit folder without enabling audio overwrite behavior.
 
 After the folder is ready, the export stage copies tracks whose planned action is `copy` and converts tracks whose planned action is `convert`. Conversion uses `ppb/ffmpeg_tools.py` and writes only destination files inside the final output folder. Blocked tracks are skipped, missing sources are reported as `source_missing`, and existing destination files are reported as `destination_exists` unless `--overwrite` is passed. Each copied file is size-checked after copy. Converted files are verified by the ffmpeg helper by checking that the destination file was created.
 
 When planned convert tracks exist, ffmpeg is resolved from `--ffmpeg` or from `PATH`. If ffmpeg is missing or not runnable, copy-only tracks still proceed, convert tracks are reported as `ffmpeg_missing`, and the error is written to `export_report.json`, `export_report.txt`, and `export.log`.
 
-After copying and conversion, the tool evaluates loudness processing for the final exported audio files only. Loudness runs only in real non-dry-run exports, only for tracks whose export status is `copied` or `converted`, only for destination files inside the final output folder, and only when `settings.normalize_loudness=true` and `--skip-loudness` is not passed. Failed, skipped, missing, conflicted, blocked, and `ffmpeg_missing` tracks are not measured or normalized.
+After copying, conversion, and safe resume reuse, the tool evaluates loudness processing for newly exported audio files only. Loudness runs only in real non-dry-run exports, only for tracks whose export status is `copied` or `converted`, only for destination files inside the final output folder, and only when `settings.normalize_loudness=true` and `--skip-loudness` is not passed. Failed, skipped, missing, conflicted, blocked, `ffmpeg_missing`, and `resumed` tracks are not measured or normalized.
 
 When loudness processing runs, the CLI first calls ffmpeg `loudnorm` in first-pass measurement mode with `target_lufs`, `true_peak_db`, and the default loudness range target. The first pass writes to ffmpeg's `null` muxer. If measurement succeeds, the CLI then runs `loudnorm` second pass on the already-exported copy. The second pass writes a unique temporary audio file inside the same final output folder, then replaces the exported copy only after ffmpeg succeeds. The user-facing filename stays stable. If normalization fails, the existing unnormalized exported file remains intact and only the temporary output from that attempt is removed.
 
@@ -228,13 +230,13 @@ If `settings.normalize_loudness=false` or `--skip-loudness` is passed, loudness 
 
 Input warnings are still preserved in `input_warnings` / `pre_export_warnings`, but the resolved pre-export warning `No integrated loudness value is available yet.` is not repeated as an unresolved final warning after loudness has been measured successfully.
 
-After loudness processing is complete, the tool evaluates tag writing for final exported audio files only. Tags are written only in real non-dry-run exports, only when `settings.write_tags=true`, and only when `--skip-tags` is not passed. Failed, skipped, missing, conflicted, blocked, and `ffmpeg_missing` tracks are not tagged. The CLI passes only normalized track metadata from the job to `ppb/tags.py`: `title`, `artist`, `album`, `albumartist`, `tracknumber`, `date` or `year`, and `genre`. It never copies metadata from source files and never writes tags to `source_path`.
+After loudness processing is complete, the tool evaluates tag writing for final exported audio files only. Tags are written only in real non-dry-run exports, only when `settings.write_tags=true`, and only when `--skip-tags` is not passed. Failed, skipped, missing, conflicted, blocked, `ffmpeg_missing`, and `resumed` tracks are not tagged. The CLI passes only normalized track metadata from the job to `ppb/tags.py`: `title`, `artist`, `album`, `albumartist`, `tracknumber`, `date` or `year`, and `genre`. It never copies metadata from source files and never writes tags to `source_path`.
 
 Tag writing currently supports MP3 ID3v2.3/ID3v2.4 through `--id3-version`, FLAC VorbisComment, and M4A/MP4 metadata atoms when mutagen can parse the exported copy. Unsupported final formats are recorded as `unsupported_format` without crashing the export. If tag writing fails for one track, the exported audio file is kept, the error is recorded, and the rest of the export continues unless an existing earlier fatal condition already stopped the run.
 
 Then the tool evaluates `settings.generate_m3u8` from the normalized job. If the setting is `true` or missing, the CLI generates a UTF-8 `playlist.m3u8` (or the filename passed via `--m3u-name`) inside the same final output folder. If the setting is `false`, M3U8 generation is skipped and the skip is recorded in `export_report.json`.
 
-The generated playlist always starts with `#EXTM3U`, uses relative paths from the M3U8 file location to exported files, preserves playlist order, and includes only tracks whose output file was actually created successfully in this run. Successfully copied and successfully converted tracks are included. Failed, skipped, missing, conflicted, and `ffmpeg_missing` tracks are excluded. When metadata is available, the tool writes `#EXTINF:<duration>,<artist> - <title>` lines. If no tracks were exported successfully, the tool still writes a valid empty playlist containing only `#EXTM3U`.
+The generated playlist always starts with `#EXTM3U`, uses relative paths from the M3U8 file location to final output files, preserves playlist order, and includes tracks whose output file is available for this run. Successfully copied, successfully converted, and safely `resumed` tracks are included. Failed, skipped, missing, conflicted, and `ffmpeg_missing` tracks are excluded. When metadata is available, the tool writes `#EXTINF:<duration>,<artist> - <title>` lines. If no tracks are available for the playlist, the tool still writes a valid empty playlist containing only `#EXTM3U`.
 
 The stage writes `export_report.json` into the final folder with one result per track. Result statuses include:
 
@@ -245,6 +247,7 @@ The stage writes `export_report.json` into the final folder with one result per 
 - `source_missing`
 - `destination_exists`
 - `ffmpeg_missing`
+- `resumed`
 
 The same `export_report.json` also records:
 
@@ -279,6 +282,9 @@ The same `export_report.json` also records:
 - `resume_errors`
 - `resume_comparison`
 - `resume_comparison_totals`
+- `resume_execution_totals`
+
+The top-level `totals` / `summary` include `resumed`, `reused`, `resume_reuse_skipped_processing`, `unsafe_resume_candidates`, and `safe_candidates_processed_normally` when resume metadata is available.
 
 Each track record in `export_report.json` includes loudness measurement fields:
 
@@ -323,13 +329,20 @@ Each track record also includes tag-writing fields:
 - `tag_warnings`
 - `tag_error`
 
-The stage also writes `export_report.txt`, a human-readable report for the completed run. It summarizes the playlist name, input path, final output folder, copied/converted/skipped/failed/source-missing/destination-conflict/ffmpeg-missing totals, loudness measured/normalized/skipped/failed/ffmpeg-missing totals, post-normalization verification totals, tag-writing status and totals, per-track loudness/tag issues, M3U8 status and path, failed or missing tracks, destination conflicts, and generated files. Resolved integrated-loudness pre-export warnings are kept in the input warning trace but are not shown under final unresolved `Warnings`.
+Each track record also includes resume execution fields:
 
-When `--resume` is passed, `export_report.txt` also includes a `Resume Preflight` section with whether prior state was found, whether prior session/report files were present, and the preflight warning/error counts. It also includes a `Resume Comparison` section with candidate totals, safe/unsafe counts, missing prior result count, existing output file count, and size match/mismatch counts.
+- `resume_reused`: `true` or `false`
+- `resume_reason`
+- `resume_prior_status`
+- `resume_prior_output_path`
 
-The stage writes `export.log` using only Python standard library logging. The log records the main real-run milestones: validation completed, output folder created, resume requested and prior session/report found or missing when `--resume` is passed, resume comparison started, resume comparison totals, important unsafe comparison reasons when present, export stage completed, conversions or copy operations, loudness measurement started, loudness normalization started, per-track loudness measured/normalized/verified/skipped/failed entries, loudness measurement completed, loudness normalization completed, loudness verification completed, tag writing started, per-track tag written/skipped/failed entries, tag writing completed, M3U8 generated or skipped, reports written, plus warnings and errors when available. Successful ffmpeg stderr/progress summaries are logged as non-error information; `ERROR` is reserved for failed ffmpeg calls and failed export/loudness/tag operations.
+The stage also writes `export_report.txt`, a human-readable report for the completed run. It summarizes the playlist name, input path, final output folder, copied/converted/resumed/skipped/failed/source-missing/destination-conflict/ffmpeg-missing totals, loudness measured/normalized/skipped/failed/ffmpeg-missing totals, post-normalization verification totals, tag-writing status and totals, per-track loudness/tag issues, M3U8 status and path, failed or missing tracks, destination conflicts, and generated files. Resolved integrated-loudness pre-export warnings are kept in the input warning trace but are not shown under final unresolved `Warnings`.
 
-At the end of a real run, the CLI prints a final summary containing the final output folder, copied/converted/skipped/failed/missing/conflict/ffmpeg-missing counts, M3U8 status/path, `export_report.json`, `export_report.txt`, and `export.log`.
+When `--resume` is passed, `export_report.txt` also includes a `Resume Preflight` section with whether prior state was found, whether prior session/report files were present, and the preflight warning/error counts. It also includes a `Resume Comparison` section with candidate totals, safe/unsafe counts, missing prior result count, existing output file count, and size match/mismatch counts, plus a `Resume Execution` section with reused and processed-normally counts.
+
+The stage writes `export.log` using only Python standard library logging. The log records the main real-run milestones: validation completed, output folder created/prepared, resume requested and prior session/report found or missing when `--resume` is passed, resume comparison started, resume comparison totals, resume execution started/completed, per-track reused/not-reused resume reasons, important unsafe comparison reasons when present, export stage completed, conversions or copy operations, loudness measurement started, loudness normalization started, per-track loudness measured/normalized/verified/skipped/failed entries, loudness measurement completed, loudness normalization completed, loudness verification completed, tag writing started, per-track tag written/skipped/failed entries, tag writing completed, M3U8 generated or skipped, reports written, plus warnings and errors when available. Successful ffmpeg stderr/progress summaries are logged as non-error information; `ERROR` is reserved for failed ffmpeg calls and failed export/loudness/tag operations.
+
+At the end of a real run, the CLI prints a final summary containing the final output folder, copied/converted/resumed/skipped/failed/missing/conflict/ffmpeg-missing counts, M3U8 status/path, `export_report.json`, `export_report.txt`, and `export.log`.
 
 Dry-run mode does not create `export_report.txt` or `export.log`. `--report` remains a dry-run JSON report feature.
 
@@ -415,21 +428,24 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 - Source audio files are never modified.
 - Dry-run checks whether source files exist before any real output stage.
 - The copy/conversion/tag/M3U8/report/log stage reads source files and writes only exported audio files plus generated report/log/playlist files in the selected output folder.
+- In `--resume` mode, reused audio files are only read/checked and are never copied, converted, normalized, tagged, deleted, renamed, or overwritten.
 - ffmpeg conversion receives source files only as inputs and writes destination files only inside the selected final output folder.
 - Loudness measurement receives only successfully exported destination files inside the final output folder as ffmpeg inputs and writes output to the `null` muxer.
 - Loudness normalization receives only successfully measured exported destination files inside the final output folder as ffmpeg inputs.
 - Loudness normalization writes a temporary output only inside the final output folder, then replaces the exported copy only after ffmpeg succeeds.
 - Loudness measurement and normalization never read source audio files directly in the CLI workflow.
 - Loudness normalization failures keep the existing unnormalized exported copy intact and remove only the temporary output created by that attempt.
-- Tag writing runs only after copy/conversion/loudness, only for successfully exported final copies inside the selected final output folder, and only when `settings.write_tags=true` and `--skip-tags` is not passed.
+- Tag writing runs only after copy/conversion/loudness, only for newly copied or converted final copies inside the selected final output folder, and only when `settings.write_tags=true` and `--skip-tags` is not passed.
 - Tag writing uses only normalized metadata from the job and never reads tags from source files.
 - Tag writing failures keep the exported audio file and are recorded in reports/logs without crashing the whole export.
 - All outputs must stay inside the selected output folder.
 - Resume preflight reads only `export_session.json` and `export_report.json` inside the selected final output folder and does not search outside that folder.
-- Resume comparison does not trust prior generated paths outside the selected final output folder and does not reuse prior per-track results in B12.2.
-- Resume comparison reports safe/unsafe candidates only; those candidates do not affect copy, conversion, loudness, tag writing, or M3U8 behavior.
+- Resume comparison does not trust prior generated paths outside the selected final output folder.
+- Resume execution reuses only `safe_to_reuse_candidate=true` tracks that still pass execution-time path, existence, and copy-size validation.
+- Unsafe resume candidates and safe candidates that become invalid are processed through normal behavior and may report `destination_exists` when an existing destination blocks the current operation.
+- `--resume` does not automatically enable `--overwrite`.
 - Existing files must not be silently overwritten.
-- Existing non-empty output folders are rejected unless `--overwrite` is passed.
+- Existing non-empty output folders are rejected unless `--overwrite` is passed, except that `--resume --no-create-subfolder` requires and prepares an explicit existing final output folder.
 - Duplicate planned output filenames are reported as conflicts.
 - Output filenames must be safe leaf filenames, not absolute paths or paths with `..`.
 - `--m3u-name` must be a safe leaf filename, not an absolute path, nested path, or traversal path.
@@ -457,14 +473,14 @@ pip install -r requirements.txt
 pytest tests/
 ```
 
-Focused B12.2 checks:
+Focused B12.3 checks:
 
 ```bash
 python -m ppb.cli --help
-python -m py_compile ppb\cli.py ppb\report.py ppb\resume.py
+python -m py_compile ppb\cli.py ppb\copier.py ppb\report.py ppb\resume.py ppb\m3u.py
 python -m pip show mutagen
-python -m pytest tests\test_tag_writing.py -vv --tb=short --basetemp C:\Temp\project_pytest\b12_2_tags -p no:cacheprovider
-python -m pytest tests\test_loudness_processing.py tests\test_ffmpeg_conversion.py tests\test_copier.py tests\test_cli_u1.py -q --basetemp C:\Temp\project_pytest\b12_2_regression -p no:cacheprovider
+python -m pytest tests\test_copier.py -q --basetemp C:\Temp\project_pytest\b12_3_copier -p no:cacheprovider
+python -m pytest tests\test_loudness_processing.py tests\test_ffmpeg_conversion.py tests\test_tag_writing.py tests\test_cli_u1.py -q --basetemp C:\Temp\project_pytest\b12_3_regression -p no:cacheprovider
 ```
 
 If `C:\Temp` is not writable in the local environment, use another explicit pytest temp directory outside the repository when possible. The focused conversion, loudness, and tag tests generate synthetic WAV fixtures with Python standard library `wave`; they do not use real user music files. Tests that require real ffmpeg conversion, M4A creation, or loudness normalization skip cleanly when ffmpeg is not available, while ffmpeg-missing coverage still runs with an invalid explicit `--ffmpeg` path.
@@ -477,12 +493,12 @@ If `C:\Temp` is not writable in the local environment, use another explicit pyte
 - If ffmpeg is missing for loudness processing, successfully copied or converted files remain intact and per-track loudness measurement/normalization/verification status is recorded as `ffmpeg_missing` or `skipped`.
 - Loudness normalization currently supports exported files whose final extension maps to the helper-level formats `mp3`, `flac`, `wav`, `m4a`, or `aac`. Other exported formats remain unnormalized and are reported as failed normalization attempts.
 - Tag writing supports MP3, FLAC, and M4A/MP4 final exported copies; WAV/AAC and other final formats are reported as `unsupported_format`.
-- Resume preflight and file-level comparison planning are implemented, but actual interrupted-export resume is not implemented yet.
-- `--resume` does not skip existing audio files, reuse previous per-track statuses, retry failed tracks, or enable fail-fast behavior in B12.2.
-- `playlist.m3u8` includes only successfully copied or converted files from the current run.
+- `--resume` reuses only conservative safe candidates; it does not retry failed tracks as a separate feature.
+- `--resume` does not enable fail-fast behavior.
+- `playlist.m3u8` includes successfully copied, converted, and safely resumed files from the current run.
 - Failed conversion partial files are removed only when the destination did not exist before the failed ffmpeg run.
 - `export.log` is created only for real runs after the final output folder is ready.
 
 ## Next Stage
 
-Next stage is not implemented yet. A logical next step after B12.2 is deciding and implementing actual resume execution behavior for safe candidates, with explicit tests that prove prior files are skipped only when allowed. Retry behavior and `--fail-fast` remain not implemented.
+Next stage is not implemented yet. A logical next step after B12.3 is adding focused tests around invalidated safe candidates and mixed resume/new export runs. Retry behavior and `--fail-fast` remain not implemented.

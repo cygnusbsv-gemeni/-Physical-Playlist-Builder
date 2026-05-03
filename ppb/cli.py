@@ -20,6 +20,7 @@ from ppb.copier import (
     STATUS_CONVERTED,
     STATUS_COPIED,
     STATUS_FFMPEG_MISSING,
+    STATUS_RESUMED,
     CopyTrackResult,
     run_copy_stage,
 )
@@ -29,7 +30,12 @@ from ppb.ffmpeg_tools import (
     measure_loudness_first_pass,
     normalize_loudness_second_pass,
 )
-from ppb.filesystem import OutputFolderError, build_output_folder_target, create_output_folder
+from ppb.filesystem import (
+    OutputFolderError,
+    OutputFolderResult,
+    build_output_folder_target,
+    create_output_folder,
+)
 from ppb.input_readers import AUTO_INPUT_TYPE, InputReadError, read_playlist_input
 from ppb.logging_setup import close_export_logger, setup_export_logger
 from ppb.m3u import (
@@ -51,6 +57,7 @@ from ppb.report import (
     write_dry_run_report,
     write_export_report,
     write_export_report_text,
+    write_export_session,
     TAG_STATUS_FAILED,
     TAG_STATUS_SKIPPED,
     TAG_STATUS_UNSUPPORTED_FORMAT,
@@ -114,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help=(
             "Load prior export_session.json/export_report.json from the selected final output "
-            "folder for preflight comparison planning only. Requires --no-create-subfolder."
+            "folder and safely reuse validated candidates. Requires --no-create-subfolder."
         ),
     )
     parser.add_argument(
@@ -219,7 +226,10 @@ def print_job_summary(
     print(f"  Create subfolder: {'YES' if create_subfolder else 'NO'}")
     print(f"  Overwrite existing non-empty output: {'YES' if overwrite else 'NO'}")
     if resume:
-        print("  Resume requested: YES - comparison-only, no files will be skipped or reused")
+        if dry_run:
+            print("  Resume requested: YES - dry-run reports candidates only")
+        else:
+            print("  Resume requested: YES - safe candidates may be reused after validation")
     print(
         "  Dry-run mode: "
         + (
@@ -340,7 +350,7 @@ def print_resume_preflight(resume_state: ResumeState) -> None:
     print(f"  export_session.json found: {'YES' if resume_state.session_found else 'NO'}")
     print(f"  export_report.json found: {'YES' if resume_state.report_found else 'NO'}")
     print(f"  Prior state loaded: {'YES' if resume_state.state_found else 'NO'}")
-    print("  B12.2 mode: comparison-only; prior track statuses are not reused.")
+    print("  B12.3 mode: safe candidates may be reused after execution-time validation.")
     print(f"  Warnings: {len(resume_state.warnings)}")
     print(f"  Errors: {len(resume_state.errors)}")
     print("=" * 52)
@@ -357,7 +367,10 @@ def print_resume_comparison(resume_state: ResumeState) -> None:
     print("=" * 52)
     print("  Resume Comparison")
     print("=" * 52)
-    print("  Mode: comparison-only; no files will be skipped or reused")
+    if comparison.get("applies_to_execution"):
+        print("  Mode: safe candidates can skip processing after validation")
+    else:
+        print("  Mode: comparison-only for dry-run; no files will be skipped or reused")
     print(f"  Candidates total: {totals.get('candidates_total', 0)}")
     print(f"  Safe-to-reuse candidates: {totals.get('safe_to_reuse_candidates', 0)}")
     print(f"  Unsafe candidates: {totals.get('unsafe_candidates', 0)}")
@@ -384,6 +397,7 @@ def print_copy_summary(copy_result) -> None:
     print(f"  Tracks processed: {summary['total']}")
     print(f"  Copied: {summary['copied']}")
     print(f"  Converted: {summary['converted']}")
+    print(f"  Resumed: {summary[STATUS_RESUMED]}")
     print(f"  Skipped: {summary['skipped']}")
     print(f"  Source missing: {summary['source_missing']}")
     print(f"  Destination exists: {summary['destination_exists']}")
@@ -432,6 +446,7 @@ def print_final_export_summary(
     print(f"  Final output folder: {final_output_dir}")
     print(f"  Copied: {summary['copied']}")
     print(f"  Converted: {summary['converted']}")
+    print(f"  Resumed: {summary[STATUS_RESUMED]}")
     print(f"  Skipped: {summary['skipped']}")
     print(f"  Failed: {summary['failed']}")
     print(f"  Missing: {summary['source_missing']}")
@@ -454,7 +469,7 @@ def print_final_export_summary(
             "  Resume comparison: "
             f"safe={comparison_totals.get('safe_to_reuse_candidates', 0)} "
             f"unsafe={comparison_totals.get('unsafe_candidates', 0)} "
-            "execution=unchanged"
+            f"reused={summary.get(STATUS_RESUMED, 0)}"
         )
     print("=" * 52)
 
@@ -480,8 +495,21 @@ def log_copy_details(logger, copy_result) -> None:
                 result.target_format or "(unknown)",
                 result.destination_path,
             )
+        elif result.status == STATUS_RESUMED:
+            logger.info(
+                "track %s resumed: %s (%s)",
+                result.position,
+                result.destination_path,
+                result.resume_reason or "safe resume candidate reused.",
+            )
         elif result.status == STATUS_FFMPEG_MISSING:
             logger.error("track %s ffmpeg missing: %s", result.position, result.destination_path)
+        if result.resume_reason and result.status != STATUS_RESUMED:
+            logger.info(
+                "track %s resume not reused: %s",
+                result.position,
+                result.resume_reason,
+            )
         for warning in result.warnings:
             logger.warning("track %s warning: %s", result.position, warning)
         for error in result.errors:
@@ -503,7 +531,7 @@ def log_m3u_details(logger, m3u_result) -> None:
 
 
 def log_resume_preflight(logger, resume_state: ResumeState) -> None:
-    logger.info("resume requested: comparison-only")
+    logger.info("resume requested: safe reuse enabled")
     logger.info(
         "resume preflight files: session_found=%s report_found=%s state_found=%s",
         resume_state.session_found,
@@ -529,7 +557,7 @@ def log_resume_preflight(logger, resume_state: ResumeState) -> None:
 def log_resume_comparison(logger, resume_state: ResumeState) -> None:
     comparison = resume_state.comparison or {}
     totals = comparison.get("totals") or {}
-    logger.info("resume comparison started: mode=comparison_only")
+    logger.info("resume comparison started: mode=safe_reuse_candidates")
     logger.info("resume comparison totals: %s", totals)
 
     unsafe_reasons: dict[str, int] = {}
@@ -545,6 +573,64 @@ def log_resume_comparison(logger, resume_state: ResumeState) -> None:
 
     for warning in comparison.get("warnings") or []:
         logger.warning("resume comparison warning: %s", warning)
+
+
+def log_resume_execution_started(logger, resume_state: ResumeState) -> None:
+    totals = (resume_state.comparison or {}).get("totals") or {}
+    logger.info(
+        "resume execution started: safe_candidates=%s unsafe_candidates=%s",
+        totals.get("safe_to_reuse_candidates", 0),
+        totals.get("unsafe_candidates", 0),
+    )
+
+
+def log_resume_execution_completed(logger, copy_result, resume_state: ResumeState) -> None:
+    summary = copy_result.summary
+    comparison_totals = (resume_state.comparison or {}).get("totals") or {}
+    logger.info(
+        "resume execution completed: resumed=%s skipped_processing=%s unsafe_candidates=%s",
+        summary.get(STATUS_RESUMED, 0),
+        summary.get("resume_reuse_skipped_processing", 0),
+        comparison_totals.get("unsafe_candidates", 0),
+    )
+
+
+def prepare_resume_output_folder(
+    *,
+    job,
+    plan,
+    target,
+    overwrite: bool,
+    input_path: Path | str,
+    input_type: str,
+) -> OutputFolderResult:
+    """Write a fresh session file for an explicit existing resume folder."""
+
+    if plan.errors:
+        raise OutputFolderError("; ".join(plan.errors))
+
+    output_dir = Path(plan.output_dir).resolve(strict=False)
+    if not output_dir.is_dir():
+        raise OutputFolderError(f"Resume output path is not a directory: {output_dir}")
+
+    session_path = output_dir / "export_session.json"
+    write_export_session(
+        job=job,
+        plan=plan,
+        session_path=session_path,
+        requested_out=target.requested_out,
+        create_subfolder=target.create_subfolder,
+        overwrite=overwrite,
+        input_path=input_path,
+        input_type=input_type,
+    )
+    return OutputFolderResult(
+        requested_out=target.requested_out,
+        final_output_dir=str(output_dir),
+        export_session_path=str(session_path),
+        created_output_dir=False,
+        existing_non_empty_allowed=True,
+    )
 
 
 def run_tag_writing_stage(
@@ -583,6 +669,13 @@ def run_tag_writing_stage(
 
     for index, track_result in enumerate(copy_result.results):
         track = job.tracks[index] if index < len(job.tracks) else None
+        if track_result.status == STATUS_RESUMED:
+            tag_result = _tag_skipped_result(
+                "track was reused by resume; tag writing was skipped to avoid modifying it."
+            )
+            results.append(tag_result)
+            _log_tag_track_result(logger, track_result, tag_result)
+            continue
         if track_result.status not in {STATUS_COPIED, STATUS_CONVERTED}:
             tag_result = _tag_skipped_result(
                 "track was not successfully exported; tag writing was skipped."
@@ -688,6 +781,23 @@ def run_loudness_measurement_stage(
     )
 
     for track_result in copy_result.results:
+        if track_result.status == STATUS_RESUMED:
+            skip_result = _loudness_skipped_result(
+                "track was reused by resume; loudness processing was skipped to avoid modifying it.",
+                measured_path=track_result.destination_path,
+            )
+            results.append(skip_result)
+            logger.info(
+                "track %s loudness skipped: %s",
+                track_result.position,
+                skip_result["loudness_skip_reason"],
+            )
+            logger.info(
+                "track %s loudness normalization skipped: %s",
+                track_result.position,
+                skip_result["loudness_normalization_skip_reason"],
+            )
+            continue
         if track_result.status not in {STATUS_COPIED, STATUS_CONVERTED}:
             skip_result = _loudness_skipped_result(
                 "track was not successfully exported; loudness processing was skipped."
@@ -1581,6 +1691,7 @@ def main(argv: list[str] | None = None) -> None:
             resume_state=resume_state,
             plan=plan,
             final_output_dir=target.final_output_dir,
+            applies_to_execution=not args.dry_run,
         )
 
     print_job_summary(
@@ -1603,14 +1714,24 @@ def main(argv: list[str] | None = None) -> None:
         print("[dry-run] No files were created or modified.")
     else:
         try:
-            output_result = create_output_folder(
-                job=result.job,
-                plan=plan,
-                target=target,
-                overwrite=args.overwrite or args.resume,
-                input_path=input_result.input_path,
-                input_type=input_result.input_type,
-            )
+            if resume_state is not None:
+                output_result = prepare_resume_output_folder(
+                    job=result.job,
+                    plan=plan,
+                    target=target,
+                    overwrite=args.overwrite,
+                    input_path=input_result.input_path,
+                    input_type=input_result.input_type,
+                )
+            else:
+                output_result = create_output_folder(
+                    job=result.job,
+                    plan=plan,
+                    target=target,
+                    overwrite=args.overwrite,
+                    input_path=input_result.input_path,
+                    input_type=input_result.input_type,
+                )
         except (OSError, OutputFolderError) as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             sys.exit(4)
@@ -1626,6 +1747,7 @@ def main(argv: list[str] | None = None) -> None:
         if resume_state is not None:
             log_resume_preflight(logger, resume_state)
             log_resume_comparison(logger, resume_state)
+            log_resume_execution_started(logger, resume_state)
         print(f"[output] Folder ready: {output_result.final_output_dir}")
         print(f"[output] Export session written: {output_result.export_session_path}")
         copy_result = run_copy_stage(
@@ -1636,10 +1758,15 @@ def main(argv: list[str] | None = None) -> None:
             mp3_quality=args.mp3_quality,
             audio_bitrate=args.audio_bitrate,
             target_format=result.job.settings.output_format,
+            resume_comparison=(
+                resume_state.comparison if resume_state is not None else None
+            ),
             progress_callback=print_copy_progress,
         )
         logger.info("export stage completed: %s", copy_result.summary)
         log_copy_details(logger, copy_result)
+        if resume_state is not None:
+            log_resume_execution_completed(logger, copy_result, resume_state)
         loudness_results, loudness_summary = run_loudness_measurement_stage(
             copy_result=copy_result,
             final_output_dir=output_result.final_output_dir,

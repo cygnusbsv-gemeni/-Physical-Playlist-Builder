@@ -15,6 +15,7 @@ from ppb.copier import (
     STATUS_FAILED,
     STATUS_FFMPEG_MISSING,
     STATUS_NOT_IMPLEMENTED,
+    STATUS_RESUMED,
     STATUS_SOURCE_MISSING,
     CopyStageResult,
     CopyTrackResult,
@@ -241,6 +242,8 @@ def export_report_to_dict(
         normalized_tag_results=normalized_tag_results,
     )
     resume = _resume_metadata_to_dict(resume_metadata)
+    resume_execution_totals = _resume_execution_totals(copy_result, resume)
+    summary = _summary_with_resume_totals(copy_result, resume_execution_totals)
     warnings.extend(resume["resume_warnings"])
     errors.extend(resume["resume_errors"])
 
@@ -257,8 +260,9 @@ def export_report_to_dict(
             "final_path": output_dir,
             "overwrite": copy_result.overwrite,
         },
-        "totals": copy_result.summary,
-        "summary": copy_result.summary,
+        "totals": summary,
+        "summary": summary,
+        "resume_execution_totals": resume_execution_totals,
         "loudness_totals": loudness_totals,
         "loudness_verification_totals": loudness_verification_totals,
         "loudness": _loudness_summary_to_dict(
@@ -382,6 +386,8 @@ def write_export_report_text(
     )
     tag_totals = tags.get("totals", {})
     resume = _resume_metadata_to_dict(resume_metadata)
+    resume_execution_totals = _resume_execution_totals(copy_result, resume)
+    summary = _summary_with_resume_totals(copy_result, resume_execution_totals)
     lines: list[str] = [
         "Physical Playlist Builder Export Report",
         "=" * 40,
@@ -393,6 +399,7 @@ def write_export_report_text(
         "-" * 40,
         f"Copied: {summary.get('copied', 0)}",
         f"Converted: {summary.get('converted', 0)}",
+        f"Resumed: {summary.get(STATUS_RESUMED, 0)}",
         f"Skipped: {summary.get('skipped', 0)}",
         f"Failed: {summary.get('failed', 0)}",
         f"Source missing: {summary.get('source_missing', 0)}",
@@ -444,13 +451,13 @@ def write_export_report_text(
                 f"State found: {'yes' if resume['resume_state_found'] else 'no'}",
                 f"export_session.json found: {'yes' if resume['resume_session_found'] else 'no'}",
                 f"export_report.json found: {'yes' if resume['resume_report_found'] else 'no'}",
-                "Mode: comparison-only; prior track statuses are not reused in B12.2.",
+                "Mode: safe reuse; only validated safe candidates may skip processing.",
                 f"Warnings: {len(resume['resume_warnings'])}",
                 f"Errors: {len(resume['resume_errors'])}",
                 "",
                 "Resume Comparison",
                 "-" * 40,
-                "Mode: comparison-only; candidates do not affect this export run.",
+                "Mode: conservative safe candidates.",
                 f"Candidates total: {comparison_totals.get('candidates_total', 0)}",
                 f"Safe-to-reuse candidates: {comparison_totals.get('safe_to_reuse_candidates', 0)}",
                 f"Unsafe candidates: {comparison_totals.get('unsafe_candidates', 0)}",
@@ -458,6 +465,15 @@ def write_export_report_text(
                 f"Existing output files: {comparison_totals.get('existing_output_files', 0)}",
                 f"Size matches: {comparison_totals.get('size_matches', 0)}",
                 f"Size mismatches: {comparison_totals.get('size_mismatches', 0)}",
+                "",
+                "Resume Execution",
+                "-" * 40,
+                f"Reused tracks: {resume_execution_totals.get(STATUS_RESUMED, 0)}",
+                "Processing skipped by reuse: "
+                f"{resume_execution_totals.get('resume_reuse_skipped_processing', 0)}",
+                f"Unsafe candidates: {resume_execution_totals.get('unsafe_resume_candidates', 0)}",
+                "Safe candidates processed normally: "
+                f"{resume_execution_totals.get('safe_candidates_processed_normally', 0)}",
                 "",
             ]
         )
@@ -534,7 +550,10 @@ def update_export_session_copy_summary(
     handoff = data.setdefault("handoff", {})
     handoff["audio_files_copied"] = copy_result.summary["copied"] > 0
     handoff["audio_files_exported"] = (
-        copy_result.summary["copied"] + copy_result.summary[STATUS_CONVERTED] > 0
+        copy_result.summary["copied"]
+        + copy_result.summary[STATUS_CONVERTED]
+        + copy_result.summary[STATUS_RESUMED]
+        > 0
     )
     handoff["copy_report_path"] = str(report_path)
     handoff["copy_summary"] = copy_result.summary
@@ -619,6 +638,56 @@ def _resume_comparison_to_dict(value: Any) -> dict[str, Any]:
         "warnings": [str(item) for item in warnings] if isinstance(warnings, list) else [],
         "candidates": candidates if isinstance(candidates, list) else [],
     }
+
+
+def _resume_execution_totals(
+    copy_result: CopyStageResult,
+    resume: dict[str, Any],
+) -> dict[str, int]:
+    comparison_totals = resume.get("resume_comparison_totals") or {}
+    resumed_count = sum(1 for result in copy_result.results if result.status == STATUS_RESUMED)
+    safe_candidates = _int_from_mapping(comparison_totals, "safe_to_reuse_candidates")
+    unsafe_candidates = _int_from_mapping(comparison_totals, "unsafe_candidates")
+    return {
+        STATUS_RESUMED: resumed_count,
+        "reused": resumed_count,
+        "resume_reuse_skipped_processing": sum(
+            1 for result in copy_result.results if result.resume_reused
+        ),
+        "unsafe_resume_candidates": unsafe_candidates,
+        "safe_candidates_processed_normally": max(safe_candidates - resumed_count, 0),
+    }
+
+
+def _summary_with_resume_totals(
+    copy_result: CopyStageResult,
+    resume_execution_totals: dict[str, int],
+) -> dict[str, int]:
+    summary = dict(copy_result.summary)
+    summary[STATUS_RESUMED] = resume_execution_totals.get(STATUS_RESUMED, 0)
+    summary["reused"] = resume_execution_totals.get("reused", 0)
+    summary["resume_reuse_skipped_processing"] = resume_execution_totals.get(
+        "resume_reuse_skipped_processing",
+        0,
+    )
+    summary["unsafe_resume_candidates"] = resume_execution_totals.get(
+        "unsafe_resume_candidates",
+        0,
+    )
+    summary["safe_candidates_processed_normally"] = resume_execution_totals.get(
+        "safe_candidates_processed_normally",
+        0,
+    )
+    return summary
+
+
+def _int_from_mapping(mapping: Any, key: str) -> int:
+    if not isinstance(mapping, dict):
+        return 0
+    try:
+        return int(mapping.get(key, 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _m3u_metadata_to_dict(m3u_result: M3UGenerationResult | None) -> dict[str, Any]:

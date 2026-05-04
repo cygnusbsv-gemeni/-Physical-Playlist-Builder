@@ -1,0 +1,646 @@
+diff -ruN orig/PROJECT_FILES.md new/PROJECT_FILES.md
+--- a/PROJECT_FILES.md	2026-05-03 16:12:38.991418698 +0000
++++ b/PROJECT_FILES.md	2026-05-03 16:12:39.004834142 +0000
+@@ -8,7 +8,7 @@
+ 
+ B12.3 - Actual resume reuse for safe candidates.
+ 
+-The project keeps the B11.3 runtime export behavior: it validates neutral playlist input, builds a dry-run plan, creates or prepares a safe output folder, writes `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert` through `ppb/ffmpeg_tools.py`, measures loudness for newly exported final output files when `settings.normalize_loudness=true`, normalizes those exported copies with ffmpeg `loudnorm` second pass, verifies loudness again after successful normalization, writes normalized tags to newly exported final copies when `settings.write_tags=true` and `--skip-tags` is not passed, generates a UTF-8 `playlist.m3u8` from final copied/converted/resumed files, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. B12.3 extends `--resume` from comparison planning into actual conservative reuse: only `safe_to_reuse_candidate=true` tracks that still pass execution-time path, existence, and copy-size checks are reported as `resumed` and skipped by copy/conversion/loudness/tag writing. Unsafe or invalidated candidates continue through normal behavior. Retry and fail-fast remain not implemented.
++The project keeps the B11.3 runtime export behavior: it validates neutral playlist input, builds a dry-run plan, creates or prepares a safe output folder, writes `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert` through `ppb/ffmpeg_tools.py`, measures loudness for newly exported final output files when `settings.normalize_loudness=true`, normalizes those exported copies with ffmpeg `loudnorm` second pass, verifies loudness again after successful normalization, writes normalized tags to newly exported final copies when `settings.write_tags=true` and `--skip-tags` is not passed, generates a UTF-8 `playlist.m3u8` from final copied/converted/resumed files, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. B12.3 extends `--resume` from comparison planning into actual conservative reuse: only `safe_to_reuse_candidate=true` tracks that still pass execution-time path, existence, and copy-size checks are reported as `resumed` and skipped by copy/conversion/loudness/tag writing. Unsafe or invalidated candidates continue through normal behavior. A local B12.3 hardening patch makes copied exported files writable after copy and adds small permission-only retries before loudness replacement and tag writing for Windows/cloud-sync `PermissionError` / `WinError 5` cases. General retry and fail-fast remain not implemented.
+ 
+ ## Project File Map
+ 
+@@ -24,12 +24,12 @@
+ | `ppb/input_readers.py` | TXT / CSV / M3U / M3U8 input readers | Converts convenience inputs into the neutral `PlaylistJob` path. |
+ | `ppb/planner.py` | Dry-run and operation planning | Produces planned `copy`, `convert`, blocked, and error operations. |
+ | `ppb/filesystem.py` | Safe output folder creation and `export_session.json` writing | Does not copy audio files directly. |
+-| `ppb/copier.py` | Real export-stage logic | Copies planned `copy` operations, converts planned `convert` operations through the ffmpeg helper, verifies copied size, skips blocked tracks, maps conversion failures to explicit statuses, reuses execution-validated safe resume candidates as `resumed`, records per-track resume fields, and never writes outside final output folder. |
++| `ppb/copier.py` | Real export-stage logic | Copies planned `copy` operations, makes copied exported files writable after copy, converts planned `convert` operations through the ffmpeg helper, verifies copied size, skips blocked tracks, maps conversion failures to explicit statuses, reuses execution-validated safe resume candidates as `resumed`, records per-track resume fields, and never writes outside final output folder. |
+ | `ppb/report.py` | JSON and text reports | Writes dry-run reports, export sessions, `export_report.json` with copy/convert/resumed/loudness measurement/loudness normalization/post-normalization verification/tag/M3U8/report/log metadata, tag totals, per-track `tag_status` fields, per-track resume fields, B12.3 resume comparison data, and resume execution totals when requested; writes human-readable `export_report.txt` with loudness summary, verification summary, tag-writing summary, resume preflight/comparison/execution sections, and per-track loudness/tag issues. |
+ | `ppb/resume.py` | Resume preflight state discovery, conservative comparison planning, and candidate indexing helper | Loads only `export_session.json` and `export_report.json` from the selected final output folder, handles missing/malformed/unexpected JSON safely, validates known prior final-output paths, rejects trusted generated paths outside the selected final output folder, compares current planned operations with prior track results and existing output files, returns conservative comparison candidates/totals, and exposes candidates by operation index for execution. It does not implement retry or fail-fast behavior. |
+ | `ppb/logging_setup.py` | Logging setup | B8 standard-library logging helper for per-export `export.log` inside the final output folder. |
+-| `ppb/ffmpeg_tools.py` | Isolated ffmpeg executable resolution, single-file conversion helper, low-level loudness measurement helper, and low-level loudness normalization helper | Resolves ffmpeg from `PATH` or an explicit path, validates with `ffmpeg -version`, converts one source file into one destination inside an explicit output folder, removes a failed partial destination only when that file did not exist before the failed run, preserves sample rate by default, supports mp3/flac/wav/m4a/aac helper-level targets, measures loudness via read-only ffmpeg loudnorm first pass for exported copies, and normalizes exported copies via loudnorm second pass using safe temporary files inside the final output folder. The CLI also reuses the measurement helper for post-normalization verification. |
+-| `ppb/tags.py` | Isolated tag-writing helper for exported copies | Provides `TagWriteResult` and `write_tags_to_exported_file()` for one already-exported file inside `final_output_dir`; supports MP3 ID3v2.3/ID3v2.4, FLAC VorbisComment, and M4A/MP4 metadata atoms through mutagen; ignores `source_path` metadata and is called by the CLI only for final exported copies. |
++| `ppb/ffmpeg_tools.py` | Isolated ffmpeg executable resolution, single-file conversion helper, low-level loudness measurement helper, and low-level loudness normalization helper | Resolves ffmpeg from `PATH` or an explicit path, validates with `ffmpeg -version`, converts one source file into one destination inside an explicit output folder, removes a failed partial destination only when that file did not exist before the failed run, preserves sample rate by default, supports mp3/flac/wav/m4a/aac helper-level targets, measures loudness via read-only ffmpeg loudnorm first pass for exported copies, and normalizes exported copies via loudnorm second pass using safe temporary files inside the final output folder. Before replacing the exported copy after successful loudnorm output, it makes the destination writable and retries permission-only replacement failures a few times. The CLI also reuses the measurement helper for post-normalization verification. |
++| `ppb/tags.py` | Isolated tag-writing helper for exported copies | Provides `TagWriteResult` and `write_tags_to_exported_file()` for one already-exported file inside `final_output_dir`; makes the exported copy writable before writing and retries permission-only failures a few times; supports MP3 ID3v2.3/ID3v2.4, FLAC VorbisComment, and M4A/MP4 metadata atoms through mutagen; ignores `source_path` metadata and is called by the CLI only for final exported copies. |
+ | `ppb/m3u.py` | M3U8 generation | Writes UTF-8 `playlist.m3u8` from successfully copied, converted, and safely resumed files while preserving playlist order, and sanitizes EXTINF text safely. |
+ | `DOC/physical_playlist_job_v1_contract.md` | External neutral JSON contract documentation | Contract was not changed in B11.3. |
+ | `DOC/examples/playlist_job.v1.canonical.json` | Canonical sample job | Not edited in B11.3. |
+@@ -54,6 +54,12 @@
+ | `ppb/m3u.py` | Includes `resumed` output files in `playlist.m3u8` together with copied/converted files while preserving playlist order. |
+ | `README.md` | Updated the current stage, usage, safety rules, validation commands, current limitations, and next-stage note for B12.3 actual safe reuse. |
+ | `PROJECT_FILES.md` | Updated the stage description, file map, current-stage changes, generated file notes, and safety notes for B12.3. |
++| `ppb/copier.py` | Local B12.3 hardening: copied exported files are made writable after `shutil.copy2()` so read-only source attributes do not block later loudness/tag writing. |
++| `ppb/ffmpeg_tools.py` | Local B12.3 hardening: loudness replacement makes the exported destination writable and retries permission-only replace failures before reporting failure while keeping the original exported file intact. |
++| `ppb/tags.py` | Local B12.3 hardening: tag writing makes the exported destination writable and retries permission-only mutagen save failures. |
++| `tests/test_copier.py` | Added focused read-only copied-file coverage. |
++| `tests/test_loudness_processing.py` | Added focused read-only replacement and final permission-failure cleanup coverage. |
++| `tests/test_tag_writing.py` | Added focused read-only exported MP3 tag-writing coverage. |
+ 
+ ## Generated/Runtime Files
+ 
+@@ -87,7 +93,7 @@
+ - Source files are passed to ffmpeg only as inputs; conversion never runs in-place on source audio.
+ - Loudness measurement passes only successfully exported destination files inside the final output folder to ffmpeg and writes output to the `null` muxer.
+ - Loudness normalization passes only successfully measured exported destination files inside the final output folder to ffmpeg.
+-- Loudness normalization writes temporary files only inside the final output folder and replaces the exported copy only after ffmpeg succeeds.
++- Loudness normalization writes temporary files only inside the final output folder and replaces the exported copy only after ffmpeg succeeds. Before replacement it makes the exported destination writable and retries permission-only Windows/cloud-sync failures a few times.
+ - Post-normalization verification measures only the final normalized exported file inside the final output folder and does not modify or delete it.
+ - Post-normalization verification failures are reported as loudness verification problems and do not downgrade the copied/converted/normalized export status.
+ - The main CLI workflow never measures or normalizes source audio files directly.
+@@ -98,7 +104,7 @@
+ - Loudness normalization helper-level outputs are currently supported for `mp3`, `flac`, `wav`, `m4a`, and `aac`; unsupported final extensions are reported as failed normalization attempts.
+ - `ppb/tags.py` refuses to write tags outside the final output folder and refuses missing exported files.
+ - `ppb/tags.py` uses only the provided normalized metadata dict, ignores `source_path` metadata, and never reads or modifies source audio files.
+-- The main CLI workflow calls `ppb/tags.py` only after copy/conversion/loudness, only for `copied` or `converted` track results with destination files inside the final output folder, and only when `settings.write_tags=true` and `--skip-tags` is not passed. `resumed` tracks are deliberately skipped.
++- The main CLI workflow calls `ppb/tags.py` only after copy/conversion/loudness, only for `copied` or `converted` track results with destination files inside the final output folder, and only when `settings.write_tags=true` and `--skip-tags` is not passed. `resumed` tracks are deliberately skipped. Tag writing makes the exported destination writable and retries permission-only Windows/cloud-sync failures a few times.
+ - Per-track tag failures keep the exported audio file and are recorded in `export_report.json`, `export_report.txt`, and `export.log`.
+ - Resume preflight reads only `export_session.json` and `export_report.json` inside the selected final output folder.
+ - Resume preflight validates known prior final-output paths before reporting the state and refuses to trust generated prior paths outside the selected final output folder.
+@@ -106,4 +112,4 @@
+ - Resume execution consumes only `safe_to_reuse_candidate=true` candidates and revalidates current destination path, prior output path, file existence, and copy size before returning `resumed`.
+ - Unsafe resume candidates and safe candidates invalidated at execution time continue through normal copy/convert behavior and may report `destination_exists` without overwriting.
+ - `--resume` does not automatically enable `--overwrite`.
+-- Retry is not implemented, and fail-fast is not implemented.
++- General retry is not implemented, and fail-fast is not implemented. A small permission-only retry exists only for exported-copy loudness replacement and tag writing inside the final output folder.
+diff -ruN orig/README.md new/README.md
+--- a/README.md	2026-05-03 16:12:38.973305346 +0000
++++ b/README.md	2026-05-03 16:12:38.981692443 +0000
+@@ -6,7 +6,7 @@
+ How do I physically prepare this playlist on disk?
+ ```
+ 
+-Current stage: B12.3 keeps the B11.3 export workflow and extends safe resume preflight with actual conservative file reuse. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates or prepares the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, measures and normalizes loudness for newly exported output files when requested, writes normalized tags to newly exported final copies when `settings.write_tags=true`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. Tag writing happens only after copy/conversion/loudness, only for newly exported files inside the final output folder, and never reads or modifies source audio files. `--resume` inspects `export_session.json` and `export_report.json` inside an explicit existing final output folder, validates prior metadata, compares the current operation plan with prior per-track results and existing output files, and reuses only tracks that remain safe at execution time. Reused tracks are reported as `resumed`, are included in `playlist.m3u8`, and are not copied, converted, normalized, or tagged again. Retry, fail-fast behavior, and bundled ffmpeg are not implemented.
++Current stage: B12.3 keeps the B11.3 export workflow and extends safe resume preflight with actual conservative file reuse. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates or prepares the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, measures and normalizes loudness for newly exported output files when requested, writes normalized tags to newly exported final copies when `settings.write_tags=true`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. Copied exported files are made writable after copy so read-only source attributes do not block later PPB processing. Loudness replacement and tag writing also make the final exported copy writable before writing and use a small permission-only retry for Windows/cloud-sync `PermissionError` / `WinError 5` races. Tag writing happens only after copy/conversion/loudness, only for newly exported files inside the final output folder, and never reads or modifies source audio files. `--resume` inspects `export_session.json` and `export_report.json` inside an explicit existing final output folder, validates prior metadata, compares the current operation plan with prior per-track results and existing output files, and reuses only tracks that remain safe at execution time. Reused tracks are reported as `resumed`, are included in `playlist.m3u8`, and are not copied, converted, normalized, or tagged again. General retry, fail-fast behavior, and bundled ffmpeg are not implemented.
+ 
+ ## Supported Input Types
+ 
+@@ -216,7 +216,7 @@
+ 
+ The output stage writes `export_session.json` into the final folder. This file records the final output path, the validated job, the dry-run plan, and a handoff field named `handoff.final_output_dir`. In `--resume` mode the selected final output folder must already exist, and the stage prepares that explicit folder without enabling audio overwrite behavior.
+ 
+-After the folder is ready, the export stage copies tracks whose planned action is `copy` and converts tracks whose planned action is `convert`. Conversion uses `ppb/ffmpeg_tools.py` and writes only destination files inside the final output folder. Blocked tracks are skipped, missing sources are reported as `source_missing`, and existing destination files are reported as `destination_exists` unless `--overwrite` is passed. Each copied file is size-checked after copy. Converted files are verified by the ffmpeg helper by checking that the destination file was created.
++After the folder is ready, the export stage copies tracks whose planned action is `copy` and converts tracks whose planned action is `convert`. Conversion uses `ppb/ffmpeg_tools.py` and writes only destination files inside the final output folder. Blocked tracks are skipped, missing sources are reported as `source_missing`, and existing destination files are reported as `destination_exists` unless `--overwrite` is passed. Each copied file is size-checked after copy, and the exported copy is made writable so read-only source attributes are not preserved in a way that blocks loudness or tag writing. Converted files are verified by the ffmpeg helper by checking that the destination file was created.
+ 
+ When planned convert tracks exist, ffmpeg is resolved from `--ffmpeg` or from `PATH`. If ffmpeg is missing or not runnable, copy-only tracks still proceed, convert tracks are reported as `ffmpeg_missing`, and the error is written to `export_report.json`, `export_report.txt`, and `export.log`.
+ 
+@@ -366,7 +366,7 @@
+ 
+ The CLI calls `measure_loudness_first_pass()` after successful copy/conversion. It runs ffmpeg with the `loudnorm` filter in first-pass mode and writes output to ffmpeg's `null` muxer, so it does not create, modify, replace, delete, rename, normalize, or tag audio files. It returns structured fields including `success`, `return_code`, `input_i`, `input_tp`, `input_lra`, `input_thresh`, `target_offset`, raw loudnorm JSON payload, and stderr diagnostics. The CLI stores these values in reports and logs.
+ 
+-When first-pass measurement succeeds, the CLI calls `normalize_loudness_second_pass()` for the same exported file. The helper refuses files outside the final output folder, creates a unique temporary destination inside that folder, uses the measured `loudnorm` values for the second pass, writes no metadata tags (`-map_metadata -1`), and replaces the exported copy only after ffmpeg succeeds. If ffmpeg fails or the temporary output is incomplete, the original exported copy remains in place and the attempt is reported as `failed` or `ffmpeg_missing`. The CLI then verifies successful normalization by measuring the final exported file again.
++When first-pass measurement succeeds, the CLI calls `normalize_loudness_second_pass()` for the same exported file. The helper refuses files outside the final output folder, creates a unique temporary destination inside that folder, uses the measured `loudnorm` values for the second pass, writes no metadata tags (`-map_metadata -1`), makes the exported destination writable, and replaces the exported copy only after ffmpeg succeeds. Replacement uses a small permission-only retry for Windows/cloud-sync `PermissionError` / `WinError 5` cases. If ffmpeg fails, the temporary output is incomplete, or replacement finally fails, the original exported copy remains in place and the attempt is reported as `failed` or `ffmpeg_missing`. The CLI then verifies successful normalization by measuring the final exported file again.
+ 
+ Example generated files after a real run:
+ 
+@@ -387,7 +387,7 @@
+ - `metadata`: normalized metadata supplied by the caller;
+ - `id3_version`: `v23` or `v24` for MP3.
+ 
+-The helper refuses files outside `final_output_dir`, refuses missing files, ignores `source_path` if it appears in metadata, and never copies metadata from source audio files. It writes only supported fields from the provided metadata dict: `title`, `artist`, `album`, `albumartist`, `tracknumber`, `date` or `year`, and `genre`.
++The helper refuses files outside `final_output_dir`, refuses missing files, ignores `source_path` if it appears in metadata, and never copies metadata from source audio files. Before writing, it makes the exported copy writable and uses a small permission-only retry for Windows/cloud-sync `PermissionError` / `WinError 5` cases. It writes only supported fields from the provided metadata dict: `title`, `artist`, `album`, `albumartist`, `tracknumber`, `date` or `year`, and `genre`.
+ 
+ Supported helper-level tag formats:
+ 
+@@ -494,9 +494,11 @@
+ - Loudness normalization currently supports exported files whose final extension maps to the helper-level formats `mp3`, `flac`, `wav`, `m4a`, or `aac`. Other exported formats remain unnormalized and are reported as failed normalization attempts.
+ - Tag writing supports MP3, FLAC, and M4A/MP4 final exported copies; WAV/AAC and other final formats are reported as `unsupported_format`.
+ - `--resume` reuses only conservative safe candidates; it does not retry failed tracks as a separate feature.
++- Only permission-related write operations inside the final output folder have a small built-in retry; this is not a general retry/fail-fast system.
+ - `--resume` does not enable fail-fast behavior.
+ - `playlist.m3u8` includes successfully copied, converted, and safely resumed files from the current run.
+ - Failed conversion partial files are removed only when the destination did not exist before the failed ffmpeg run.
++- Exported copies are made writable after copy and before loudness replacement/tag writing to avoid inherited read-only attributes or transient Windows/cloud-sync permission locks blocking later PPB processing.
+ - `export.log` is created only for real runs after the final output folder is ready.
+ 
+ ## Next Stage
+diff -ruN orig/ppb/copier.py new/ppb/copier.py
+--- a/ppb/copier.py	2026-05-03 16:12:38.818680201 +0000
++++ b/ppb/copier.py	2026-05-03 16:12:38.828902774 +0000
+@@ -4,6 +4,7 @@
+ 
+ import re
+ import shutil
++import stat
+ from dataclasses import dataclass, field
+ from pathlib import Path, PureWindowsPath
+ from typing import Any, Callable
+@@ -271,6 +272,7 @@
+ 
+     try:
+         shutil.copy2(source_path, destination_path)
++        writable_warning = _make_exported_file_writable(destination_path)
+         destination_size = destination_path.stat().st_size
+     except OSError as exc:
+         return _result(
+@@ -282,6 +284,9 @@
+             errors=errors + [str(exc)],
+         )
+ 
++    if writable_warning:
++        warnings.append(writable_warning)
++
+     if destination_size != source_size:
+         return _result(
+             operation,
+@@ -608,6 +613,21 @@
+     return text if text else None
+ 
+ 
++def _make_exported_file_writable(path: Path) -> str | None:
++    """Clear read-only mode on an exported copy without touching source files."""
++
++    try:
++        if not path.is_file():
++            return None
++        current_mode = path.stat().st_mode
++        writable_mode = current_mode | stat.S_IWRITE | stat.S_IWUSR
++        if writable_mode != current_mode:
++            path.chmod(writable_mode)
++    except OSError as exc:
++        return f"Could not make exported copy writable after copy: {exc}"
++    return None
++
++
+ def _target_format_for_conversion(operation: TrackOperation, target_format: str | None) -> str:
+     normalized = (target_format or "").strip().lower().lstrip(".")
+     if normalized and normalized != "source":
+diff -ruN orig/ppb/ffmpeg_tools.py new/ppb/ffmpeg_tools.py
+--- a/ppb/ffmpeg_tools.py	2026-05-03 16:12:38.842451124 +0000
++++ b/ppb/ffmpeg_tools.py	2026-05-03 16:12:38.853988819 +0000
+@@ -11,7 +11,9 @@
+ import os
+ import re
+ import shutil
++import stat
+ import subprocess
++import time
+ from dataclasses import dataclass, field
+ from pathlib import Path
+ 
+@@ -34,6 +36,8 @@
+ 
+ _BITRATE_RE = re.compile(r"^[1-9][0-9]*[kKmM]?$")
+ _LOUDNORM_REQUIRED_KEYS = ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")
++_PERMISSION_RETRY_COUNT = 3
++_PERMISSION_RETRY_DELAY_SEC = 0.2
+ 
+ 
+ @dataclass(frozen=True)
+@@ -828,10 +832,12 @@
+             errors=["ffmpeg reported success but temporary normalized file was not created."],
+         )
+ 
+-    try:
+-        temporary.replace(exported)
+-    except OSError as exc:
+-        warnings = _remove_partial_destination(
++    replace_warnings, replace_error = _replace_exported_file_with_retry(
++        temporary=temporary,
++        exported=exported,
++    )
++    if replace_error is not None:
++        cleanup_warnings = _remove_partial_destination(
+             temporary,
+             destination_existed_before=False,
+         )
+@@ -849,8 +855,8 @@
+             stdout=stdout,
+             stderr=stderr,
+             stderr_summary=stderr_summary,
+-            warnings=warnings,
+-            errors=[f"Could not replace exported file after loudness normalization: {exc}"],
++            warnings=replace_warnings + cleanup_warnings,
++            errors=[replace_error],
+         )
+ 
+     if not exported.is_file():
+@@ -885,6 +891,7 @@
+         stdout=stdout,
+         stderr=stderr,
+         stderr_summary=stderr_summary,
++        warnings=replace_warnings,
+     )
+ 
+ 
+@@ -928,6 +935,59 @@
+     error: str | None = None
+ 
+ 
++def _replace_exported_file_with_retry(
++    *,
++    temporary: Path,
++    exported: Path,
++) -> tuple[list[str], str | None]:
++    """Replace exported copy with retry for Windows/cloud sync permission races."""
++
++    warnings: list[str] = []
++    last_error: OSError | None = None
++
++    for attempt in range(_PERMISSION_RETRY_COUNT + 1):
++        writable_warning = _make_exported_file_writable(exported)
++        if writable_warning and writable_warning not in warnings:
++            warnings.append(writable_warning)
++        try:
++            temporary.replace(exported)
++            return warnings, None
++        except OSError as exc:
++            if not _is_permission_error(exc):
++                return warnings, f"Could not replace exported file after loudness normalization: {exc}"
++            last_error = exc
++            if attempt < _PERMISSION_RETRY_COUNT:
++                time.sleep(_PERMISSION_RETRY_DELAY_SEC)
++
++    return warnings, (
++        "Could not replace exported file after loudness normalization: "
++        f"permission denied: {last_error}"
++    )
++
++
++def _make_exported_file_writable(path: Path) -> str | None:
++    """Clear read-only mode on an exported copy inside the output workflow."""
++
++    try:
++        if not path.is_file():
++            return None
++        current_mode = path.stat().st_mode
++        writable_mode = current_mode | stat.S_IWRITE | stat.S_IWUSR
++        if writable_mode != current_mode:
++            path.chmod(writable_mode)
++    except OSError as exc:
++        return f"Could not make exported file writable before loudness replacement: {exc}"
++    return None
++
++
++def _is_permission_error(exc: OSError) -> bool:
++    return (
++        isinstance(exc, PermissionError)
++        or getattr(exc, "winerror", None) == 5
++        or getattr(exc, "errno", None) in {13, 5}
++    )
++
++
+ def _ensure_ffmpeg_resolution(
+     ffmpeg: FfmpegResolutionResult | Path | str | None,
+ ) -> FfmpegResolutionResult:
+diff -ruN orig/ppb/tags.py new/ppb/tags.py
+--- a/ppb/tags.py	2026-05-03 16:12:38.865391136 +0000
++++ b/ppb/tags.py	2026-05-03 16:12:38.875828768 +0000
+@@ -3,6 +3,8 @@
+ from __future__ import annotations
+ 
+ import re
++import stat
++import time
+ from collections.abc import Mapping
+ from dataclasses import dataclass, field
+ from pathlib import Path
+@@ -33,6 +35,8 @@
+     "genre",
+ )
+ _MP4_TRACKNUMBER_RE = re.compile(r"^\s*([0-9]+)(?:\s*/\s*([0-9]+))?\s*$")
++_PERMISSION_RETRY_COUNT = 3
++_PERMISSION_RETRY_DELAY_SEC = 0.2
+ 
+ 
+ @dataclass(frozen=True)
+@@ -146,41 +150,65 @@
+             error="No supported metadata fields were provided.",
+         )
+ 
+-    try:
+-        if container_format == "mp3":
+-            payload = _write_mp3_tags(target, normalized.values, normalized_id3_version or ID3_VERSION_V24)
+-            tag_format = f"id3v2.{3 if normalized_id3_version == ID3_VERSION_V23 else 4}"
+-        elif container_format == "flac":
+-            payload = _write_flac_tags(target, normalized.values)
+-            tag_format = "vorbiscomment"
+-        elif container_format == "m4a":
+-            payload = _write_m4a_tags(target, normalized.values)
+-            tag_format = "mp4"
+-        else:
++    writable_warnings: list[str] = []
++    payload: _WritePayload | None = None
++    for attempt in range(_PERMISSION_RETRY_COUNT + 1):
++        writable_warning = _make_exported_file_writable(target)
++        if writable_warning and writable_warning not in writable_warnings:
++            writable_warnings.append(writable_warning)
++        try:
++            if container_format == "mp3":
++                payload = _write_mp3_tags(
++                    target,
++                    normalized.values,
++                    normalized_id3_version or ID3_VERSION_V24,
++                )
++                tag_format = f"id3v2.{3 if normalized_id3_version == ID3_VERSION_V23 else 4}"
++            elif container_format == "flac":
++                payload = _write_flac_tags(target, normalized.values)
++                tag_format = "vorbiscomment"
++            elif container_format == "m4a":
++                payload = _write_m4a_tags(target, normalized.values)
++                tag_format = "mp4"
++            else:
++                return TagWriteResult(
++                    success=False,
++                    status=STATUS_UNSUPPORTED_FORMAT,
++                    file_path=str(target),
++                    tag_format=tag_format,
++                    error=f"Unsupported tag-writing file type: {target.suffix or '(no extension)'}",
++                )
++            break
++        except ImportError as exc:
+             return TagWriteResult(
+                 success=False,
+-                status=STATUS_UNSUPPORTED_FORMAT,
++                status=STATUS_DEPENDENCY_MISSING,
+                 file_path=str(target),
+                 tag_format=tag_format,
+-                error=f"Unsupported tag-writing file type: {target.suffix or '(no extension)'}",
++                warnings=normalized.warnings + writable_warnings,
++                error=f"mutagen is required for tag writing: {exc}",
+             )
+-    except ImportError as exc:
+-        return TagWriteResult(
+-            success=False,
+-            status=STATUS_DEPENDENCY_MISSING,
+-            file_path=str(target),
+-            tag_format=tag_format,
+-            warnings=normalized.warnings,
+-            error=f"mutagen is required for tag writing: {exc}",
+-        )
+-    except Exception as exc:
++        except Exception as exc:
++            if _is_permission_error(exc) and attempt < _PERMISSION_RETRY_COUNT:
++                time.sleep(_PERMISSION_RETRY_DELAY_SEC)
++                continue
++            return TagWriteResult(
++                success=False,
++                status=STATUS_FAILED,
++                file_path=str(target),
++                tag_format=tag_format,
++                warnings=normalized.warnings + writable_warnings,
++                error=_format_tag_write_error(exc),
++            )
++
++    if payload is None:
+         return TagWriteResult(
+             success=False,
+             status=STATUS_FAILED,
+             file_path=str(target),
+             tag_format=tag_format,
+-            warnings=normalized.warnings,
+-            error=f"Tag writing failed: {exc}",
++            warnings=normalized.warnings + writable_warnings,
++            error="Tag writing failed: no write payload was produced.",
+         )
+ 
+     return TagWriteResult(
+@@ -189,10 +217,39 @@
+         file_path=str(target),
+         tag_format=tag_format,
+         written_fields=payload.written_fields,
+-        warnings=normalized.warnings + payload.warnings,
++        warnings=normalized.warnings + writable_warnings + payload.warnings,
++    )
++
++
++def _make_exported_file_writable(path: Path) -> str | None:
++    """Clear read-only mode on an exported copy without touching source files."""
++
++    try:
++        if not path.is_file():
++            return None
++        current_mode = path.stat().st_mode
++        writable_mode = current_mode | stat.S_IWRITE | stat.S_IWUSR
++        if writable_mode != current_mode:
++            path.chmod(writable_mode)
++    except OSError as exc:
++        return f"Could not make exported file writable before tag writing: {exc}"
++    return None
++
++
++def _is_permission_error(exc: BaseException) -> bool:
++    return (
++        isinstance(exc, PermissionError)
++        or getattr(exc, "winerror", None) == 5
++        or getattr(exc, "errno", None) in {13, 5}
+     )
+ 
+ 
++def _format_tag_write_error(exc: BaseException) -> str:
++    if _is_permission_error(exc):
++        return f"Tag writing failed: permission denied: {exc}"
++    return f"Tag writing failed: {exc}"
++
++
+ def _write_mp3_tags(
+     path: Path,
+     fields: dict[str, str],
+diff -ruN orig/tests/test_copier.py new/tests/test_copier.py
+--- a/tests/test_copier.py	2026-05-03 16:12:38.915938320 +0000
++++ b/tests/test_copier.py	2026-05-03 16:12:38.924231524 +0000
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ import json
++import stat
+ import sys
+ from pathlib import Path
+ 
+@@ -166,3 +167,35 @@
+     assert result.results[0].status == STATUS_DESTINATION_EXISTS
+     assert existing_destination.read_bytes() == b"existing destination bytes"
+     assert source.read_bytes() == b"new source bytes"
++
++
++def test_copy_stage_clears_read_only_attribute_on_exported_copy(tmp_path):
++    source = tmp_path / "sources" / "readonly.mp3"
++    source.parent.mkdir()
++    source.write_bytes(b"readonly source bytes")
++    source.chmod(source.stat().st_mode & ~stat.S_IWRITE)
++    output_dir = tmp_path / "export"
++    output_dir.mkdir()
++    job_path = write_job(
++        tmp_path,
++        [
++            {
++                "position": 1,
++                "source_path": str(source),
++                "output_filename": "readonly.mp3",
++                "artist": "Artist",
++                "title": "Readonly",
++            }
++        ],
++    )
++    plan = build_plan_from_job(job_path, output_dir)
++
++    try:
++        result = run_copy_stage(plan=plan, final_output_dir=output_dir)
++        destination = output_dir / "readonly.mp3"
++        assert result.results[0].status == STATUS_COPIED
++        assert destination.read_bytes() == b"readonly source bytes"
++        with destination.open("ab") as handle:
++            handle.write(b" writable")
++    finally:
++        source.chmod(source.stat().st_mode | stat.S_IWRITE)
+diff -ruN orig/tests/test_loudness_processing.py new/tests/test_loudness_processing.py
+--- a/tests/test_loudness_processing.py	2026-05-03 16:12:38.932402169 +0000
++++ b/tests/test_loudness_processing.py	2026-05-03 16:12:38.944777000 +0000
+@@ -4,6 +4,7 @@
+ import json
+ import math
+ import os
++import stat
+ import struct
+ import sys
+ import wave
+@@ -577,3 +578,107 @@
+     launcher.write_text(f"#!{sys.executable}\n{script_code}", encoding="utf-8")
+     launcher.chmod(0o755)
+     return launcher
++
++
++def test_loudness_normalization_replaces_read_only_exported_copy(tmp_path):
++    output_dir = tmp_path / "export"
++    output_dir.mkdir()
++    exported = output_dir / "tone.wav"
++    exported.write_bytes(b"original exported bytes")
++    exported.chmod(exported.stat().st_mode & ~stat.S_IWRITE)
++    fake_ffmpeg = write_fake_ffmpeg_that_creates_output_and_succeeds(tmp_path)
++    resolution = FfmpegResolutionResult(
++        ok=True,
++        executable=str(fake_ffmpeg),
++        source="test",
++        explicit=True,
++    )
++
++    try:
++        result = normalize_loudness_second_pass(
++            exported_path=exported,
++            output_folder=output_dir,
++            measured_input_i=-20.0,
++            measured_input_tp=-2.0,
++            measured_input_lra=3.0,
++            measured_input_thresh=-30.0,
++            measured_target_offset=0.5,
++            ffmpeg=resolution,
++        )
++    finally:
++        if exported.exists():
++            exported.chmod(exported.stat().st_mode | stat.S_IWRITE)
++
++    assert result.success
++    assert result.status == "normalized"
++    assert exported.read_bytes() == b"normalized bytes"
++    assert not loudnorm_temp_files(output_dir)
++
++
++def test_loudness_replace_permission_failure_keeps_exported_copy_and_removes_temp(
++    tmp_path,
++    monkeypatch,
++):
++    output_dir = tmp_path / "export"
++    output_dir.mkdir()
++    exported = output_dir / "tone.wav"
++    exported.write_bytes(b"original exported bytes")
++    fake_ffmpeg = write_fake_ffmpeg_that_creates_output_and_succeeds(tmp_path)
++    resolution = FfmpegResolutionResult(
++        ok=True,
++        executable=str(fake_ffmpeg),
++        source="test",
++        explicit=True,
++    )
++    original_replace = Path.replace
++
++    def fake_replace(self, target):
++        if ".ppb-loudnorm-" in self.name:
++            raise PermissionError(13, "simulated permission denied")
++        return original_replace(self, target)
++
++    monkeypatch.setattr(Path, "replace", fake_replace)
++    monkeypatch.setattr("ppb.ffmpeg_tools._PERMISSION_RETRY_COUNT", 1)
++    monkeypatch.setattr("ppb.ffmpeg_tools._PERMISSION_RETRY_DELAY_SEC", 0)
++
++    result = normalize_loudness_second_pass(
++        exported_path=exported,
++        output_folder=output_dir,
++        measured_input_i=-20.0,
++        measured_input_tp=-2.0,
++        measured_input_lra=3.0,
++        measured_input_thresh=-30.0,
++        measured_target_offset=0.5,
++        ffmpeg=resolution,
++    )
++
++    assert not result.success
++    assert result.status == "failed"
++    assert "permission denied" in "; ".join(result.errors).lower()
++    assert exported.read_bytes() == b"original exported bytes"
++    assert not loudnorm_temp_files(output_dir)
++
++
++def write_fake_ffmpeg_that_creates_output_and_succeeds(tmp_path: Path) -> Path:
++    script_code = (
++        "import pathlib\n"
++        "import sys\n"
++        "destination = pathlib.Path(sys.argv[-1])\n"
++        "destination.write_bytes(b'normalized bytes')\n"
++        "print('forced normalization success', file=sys.stderr)\n"
++    )
++    script = tmp_path / "fake_ffmpeg_success.py"
++    script.write_text(script_code, encoding="utf-8")
++
++    if os.name == "nt":
++        launcher = tmp_path / "fake_ffmpeg_success.cmd"
++        launcher.write_text(
++            f'@echo off\r\n"{sys.executable}" "{script}" %*\r\n',
++            encoding="utf-8",
++        )
++        return launcher
++
++    launcher = tmp_path / "fake_ffmpeg_success"
++    launcher.write_text(f"#!{sys.executable}\n{script_code}", encoding="utf-8")
++    launcher.chmod(0o755)
++    return launcher
+diff -ruN orig/tests/test_tag_writing.py new/tests/test_tag_writing.py
+--- a/tests/test_tag_writing.py	2026-05-03 16:12:38.954320626 +0000
++++ b/tests/test_tag_writing.py	2026-05-03 16:12:38.963978931 +0000
+@@ -4,6 +4,7 @@
+ import json
+ import logging
+ import math
++import stat
+ import struct
+ import subprocess
+ import sys
+@@ -682,3 +683,30 @@
+ 
+     playlist_text = (output_dir / "playlist.m3u8").read_text(encoding="utf-8")
+     assert "failure.mp3" in playlist_text
++
++
++def test_tag_helper_writes_to_read_only_exported_mp3_after_clearing_attribute(tmp_path):
++    pytest.importorskip("mutagen")
++    from mutagen.id3 import ID3
++
++    output_dir = tmp_path / "export"
++    output_dir.mkdir()
++    exported = output_dir / "readonly.mp3"
++    exported.write_bytes(b"not really audio, but enough for an ID3 tag fixture")
++    exported.chmod(exported.stat().st_mode & ~stat.S_IWRITE)
++
++    try:
++        result = write_tags_to_exported_file(
++            file_path=exported,
++            final_output_dir=output_dir,
++            metadata={"title": "Readonly", "artist": "Artist"},
++        )
++    finally:
++        if exported.exists():
++            exported.chmod(exported.stat().st_mode | stat.S_IWRITE)
++
++    assert result.status == STATUS_WRITTEN
++    assert result.success is True
++    tags = ID3(str(exported))
++    assert tags["TIT2"].text[0] == "Readonly"
++    assert tags["TPE1"].text[0] == "Artist"

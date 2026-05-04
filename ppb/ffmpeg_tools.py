@@ -11,7 +11,9 @@ import math
 import os
 import re
 import shutil
+import stat
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -34,6 +36,8 @@ DEFAULT_LOUDNESS_RANGE_LUFS = 11.0
 
 _BITRATE_RE = re.compile(r"^[1-9][0-9]*[kKmM]?$")
 _LOUDNORM_REQUIRED_KEYS = ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")
+_PERMISSION_RETRY_COUNT = 3
+_PERMISSION_RETRY_DELAY_SEC = 0.2
 
 
 @dataclass(frozen=True)
@@ -828,10 +832,12 @@ def normalize_loudness_second_pass(
             errors=["ffmpeg reported success but temporary normalized file was not created."],
         )
 
-    try:
-        temporary.replace(exported)
-    except OSError as exc:
-        warnings = _remove_partial_destination(
+    replace_warnings, replace_error = _replace_exported_file_with_retry(
+        temporary=temporary,
+        exported=exported,
+    )
+    if replace_error is not None:
+        cleanup_warnings = _remove_partial_destination(
             temporary,
             destination_existed_before=False,
         )
@@ -849,8 +855,8 @@ def normalize_loudness_second_pass(
             stdout=stdout,
             stderr=stderr,
             stderr_summary=stderr_summary,
-            warnings=warnings,
-            errors=[f"Could not replace exported file after loudness normalization: {exc}"],
+            warnings=replace_warnings + cleanup_warnings,
+            errors=[replace_error],
         )
 
     if not exported.is_file():
@@ -885,6 +891,7 @@ def normalize_loudness_second_pass(
         stdout=stdout,
         stderr=stderr,
         stderr_summary=stderr_summary,
+        warnings=replace_warnings,
     )
 
 
@@ -926,6 +933,59 @@ class _LoudnormValueResult:
     input_thresh: float | None = None
     target_offset: float | None = None
     error: str | None = None
+
+
+def _replace_exported_file_with_retry(
+    *,
+    temporary: Path,
+    exported: Path,
+) -> tuple[list[str], str | None]:
+    """Replace exported copy with retry for Windows/cloud sync permission races."""
+
+    warnings: list[str] = []
+    last_error: OSError | None = None
+
+    for attempt in range(_PERMISSION_RETRY_COUNT + 1):
+        writable_warning = _make_exported_file_writable(exported)
+        if writable_warning and writable_warning not in warnings:
+            warnings.append(writable_warning)
+        try:
+            temporary.replace(exported)
+            return warnings, None
+        except OSError as exc:
+            if not _is_permission_error(exc):
+                return warnings, f"Could not replace exported file after loudness normalization: {exc}"
+            last_error = exc
+            if attempt < _PERMISSION_RETRY_COUNT:
+                time.sleep(_PERMISSION_RETRY_DELAY_SEC)
+
+    return warnings, (
+        "Could not replace exported file after loudness normalization: "
+        f"permission denied: {last_error}"
+    )
+
+
+def _make_exported_file_writable(path: Path) -> str | None:
+    """Clear read-only mode on an exported copy inside the output workflow."""
+
+    try:
+        if not path.is_file():
+            return None
+        current_mode = path.stat().st_mode
+        writable_mode = current_mode | stat.S_IWRITE | stat.S_IWUSR
+        if writable_mode != current_mode:
+            path.chmod(writable_mode)
+    except OSError as exc:
+        return f"Could not make exported file writable before loudness replacement: {exc}"
+    return None
+
+
+def _is_permission_error(exc: OSError) -> bool:
+    return (
+        isinstance(exc, PermissionError)
+        or getattr(exc, "winerror", None) == 5
+        or getattr(exc, "errno", None) in {13, 5}
+    )
 
 
 def _ensure_ffmpeg_resolution(

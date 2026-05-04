@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import stat
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,6 +35,8 @@ _ORDERED_FIELDS = (
     "genre",
 )
 _MP4_TRACKNUMBER_RE = re.compile(r"^\s*([0-9]+)(?:\s*/\s*([0-9]+))?\s*$")
+_PERMISSION_RETRY_COUNT = 3
+_PERMISSION_RETRY_DELAY_SEC = 0.2
 
 
 @dataclass(frozen=True)
@@ -146,41 +150,65 @@ def write_tags_to_exported_file(
             error="No supported metadata fields were provided.",
         )
 
-    try:
-        if container_format == "mp3":
-            payload = _write_mp3_tags(target, normalized.values, normalized_id3_version or ID3_VERSION_V24)
-            tag_format = f"id3v2.{3 if normalized_id3_version == ID3_VERSION_V23 else 4}"
-        elif container_format == "flac":
-            payload = _write_flac_tags(target, normalized.values)
-            tag_format = "vorbiscomment"
-        elif container_format == "m4a":
-            payload = _write_m4a_tags(target, normalized.values)
-            tag_format = "mp4"
-        else:
+    writable_warnings: list[str] = []
+    payload: _WritePayload | None = None
+    for attempt in range(_PERMISSION_RETRY_COUNT + 1):
+        writable_warning = _make_exported_file_writable(target)
+        if writable_warning and writable_warning not in writable_warnings:
+            writable_warnings.append(writable_warning)
+        try:
+            if container_format == "mp3":
+                payload = _write_mp3_tags(
+                    target,
+                    normalized.values,
+                    normalized_id3_version or ID3_VERSION_V24,
+                )
+                tag_format = f"id3v2.{3 if normalized_id3_version == ID3_VERSION_V23 else 4}"
+            elif container_format == "flac":
+                payload = _write_flac_tags(target, normalized.values)
+                tag_format = "vorbiscomment"
+            elif container_format == "m4a":
+                payload = _write_m4a_tags(target, normalized.values)
+                tag_format = "mp4"
+            else:
+                return TagWriteResult(
+                    success=False,
+                    status=STATUS_UNSUPPORTED_FORMAT,
+                    file_path=str(target),
+                    tag_format=tag_format,
+                    error=f"Unsupported tag-writing file type: {target.suffix or '(no extension)'}",
+                )
+            break
+        except ImportError as exc:
             return TagWriteResult(
                 success=False,
-                status=STATUS_UNSUPPORTED_FORMAT,
+                status=STATUS_DEPENDENCY_MISSING,
                 file_path=str(target),
                 tag_format=tag_format,
-                error=f"Unsupported tag-writing file type: {target.suffix or '(no extension)'}",
+                warnings=normalized.warnings + writable_warnings,
+                error=f"mutagen is required for tag writing: {exc}",
             )
-    except ImportError as exc:
-        return TagWriteResult(
-            success=False,
-            status=STATUS_DEPENDENCY_MISSING,
-            file_path=str(target),
-            tag_format=tag_format,
-            warnings=normalized.warnings,
-            error=f"mutagen is required for tag writing: {exc}",
-        )
-    except Exception as exc:
+        except Exception as exc:
+            if _is_permission_error(exc) and attempt < _PERMISSION_RETRY_COUNT:
+                time.sleep(_PERMISSION_RETRY_DELAY_SEC)
+                continue
+            return TagWriteResult(
+                success=False,
+                status=STATUS_FAILED,
+                file_path=str(target),
+                tag_format=tag_format,
+                warnings=normalized.warnings + writable_warnings,
+                error=_format_tag_write_error(exc),
+            )
+
+    if payload is None:
         return TagWriteResult(
             success=False,
             status=STATUS_FAILED,
             file_path=str(target),
             tag_format=tag_format,
-            warnings=normalized.warnings,
-            error=f"Tag writing failed: {exc}",
+            warnings=normalized.warnings + writable_warnings,
+            error="Tag writing failed: no write payload was produced.",
         )
 
     return TagWriteResult(
@@ -189,8 +217,37 @@ def write_tags_to_exported_file(
         file_path=str(target),
         tag_format=tag_format,
         written_fields=payload.written_fields,
-        warnings=normalized.warnings + payload.warnings,
+        warnings=normalized.warnings + writable_warnings + payload.warnings,
     )
+
+
+def _make_exported_file_writable(path: Path) -> str | None:
+    """Clear read-only mode on an exported copy without touching source files."""
+
+    try:
+        if not path.is_file():
+            return None
+        current_mode = path.stat().st_mode
+        writable_mode = current_mode | stat.S_IWRITE | stat.S_IWUSR
+        if writable_mode != current_mode:
+            path.chmod(writable_mode)
+    except OSError as exc:
+        return f"Could not make exported file writable before tag writing: {exc}"
+    return None
+
+
+def _is_permission_error(exc: BaseException) -> bool:
+    return (
+        isinstance(exc, PermissionError)
+        or getattr(exc, "winerror", None) == 5
+        or getattr(exc, "errno", None) in {13, 5}
+    )
+
+
+def _format_tag_write_error(exc: BaseException) -> str:
+    if _is_permission_error(exc):
+        return f"Tag writing failed: permission denied: {exc}"
+    return f"Tag writing failed: {exc}"
 
 
 def _write_mp3_tags(

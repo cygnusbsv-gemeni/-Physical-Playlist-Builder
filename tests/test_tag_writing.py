@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import math
+import stat
 import struct
 import subprocess
 import sys
@@ -682,3 +683,30 @@ def test_cli_tag_failure_keeps_exported_audio_and_records_tag_error(tmp_path, mo
 
     playlist_text = (output_dir / "playlist.m3u8").read_text(encoding="utf-8")
     assert "failure.mp3" in playlist_text
+
+
+def test_tag_helper_writes_to_read_only_exported_mp3_after_clearing_attribute(tmp_path):
+    pytest.importorskip("mutagen")
+    from mutagen.id3 import ID3
+
+    output_dir = tmp_path / "export"
+    output_dir.mkdir()
+    exported = output_dir / "readonly.mp3"
+    exported.write_bytes(b"not really audio, but enough for an ID3 tag fixture")
+    exported.chmod(exported.stat().st_mode & ~stat.S_IWRITE)
+
+    try:
+        result = write_tags_to_exported_file(
+            file_path=exported,
+            final_output_dir=output_dir,
+            metadata={"title": "Readonly", "artist": "Artist"},
+        )
+    finally:
+        if exported.exists():
+            exported.chmod(exported.stat().st_mode | stat.S_IWRITE)
+
+    assert result.status == STATUS_WRITTEN
+    assert result.success is True
+    tags = ID3(str(exported))
+    assert tags["TIT2"].text[0] == "Readonly"
+    assert tags["TPE1"].text[0] == "Artist"

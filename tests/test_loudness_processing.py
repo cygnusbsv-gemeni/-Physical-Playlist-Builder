@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+import stat
 import struct
 import sys
 import wave
@@ -574,6 +575,110 @@ def write_fake_ffmpeg_that_creates_partial_and_fails(tmp_path: Path) -> Path:
         return launcher
 
     launcher = tmp_path / "fake_ffmpeg"
+    launcher.write_text(f"#!{sys.executable}\n{script_code}", encoding="utf-8")
+    launcher.chmod(0o755)
+    return launcher
+
+
+def test_loudness_normalization_replaces_read_only_exported_copy(tmp_path):
+    output_dir = tmp_path / "export"
+    output_dir.mkdir()
+    exported = output_dir / "tone.wav"
+    exported.write_bytes(b"original exported bytes")
+    exported.chmod(exported.stat().st_mode & ~stat.S_IWRITE)
+    fake_ffmpeg = write_fake_ffmpeg_that_creates_output_and_succeeds(tmp_path)
+    resolution = FfmpegResolutionResult(
+        ok=True,
+        executable=str(fake_ffmpeg),
+        source="test",
+        explicit=True,
+    )
+
+    try:
+        result = normalize_loudness_second_pass(
+            exported_path=exported,
+            output_folder=output_dir,
+            measured_input_i=-20.0,
+            measured_input_tp=-2.0,
+            measured_input_lra=3.0,
+            measured_input_thresh=-30.0,
+            measured_target_offset=0.5,
+            ffmpeg=resolution,
+        )
+    finally:
+        if exported.exists():
+            exported.chmod(exported.stat().st_mode | stat.S_IWRITE)
+
+    assert result.success
+    assert result.status == "normalized"
+    assert exported.read_bytes() == b"normalized bytes"
+    assert not loudnorm_temp_files(output_dir)
+
+
+def test_loudness_replace_permission_failure_keeps_exported_copy_and_removes_temp(
+    tmp_path,
+    monkeypatch,
+):
+    output_dir = tmp_path / "export"
+    output_dir.mkdir()
+    exported = output_dir / "tone.wav"
+    exported.write_bytes(b"original exported bytes")
+    fake_ffmpeg = write_fake_ffmpeg_that_creates_output_and_succeeds(tmp_path)
+    resolution = FfmpegResolutionResult(
+        ok=True,
+        executable=str(fake_ffmpeg),
+        source="test",
+        explicit=True,
+    )
+    original_replace = Path.replace
+
+    def fake_replace(self, target):
+        if ".ppb-loudnorm-" in self.name:
+            raise PermissionError(13, "simulated permission denied")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fake_replace)
+    monkeypatch.setattr("ppb.ffmpeg_tools._PERMISSION_RETRY_COUNT", 1)
+    monkeypatch.setattr("ppb.ffmpeg_tools._PERMISSION_RETRY_DELAY_SEC", 0)
+
+    result = normalize_loudness_second_pass(
+        exported_path=exported,
+        output_folder=output_dir,
+        measured_input_i=-20.0,
+        measured_input_tp=-2.0,
+        measured_input_lra=3.0,
+        measured_input_thresh=-30.0,
+        measured_target_offset=0.5,
+        ffmpeg=resolution,
+    )
+
+    assert not result.success
+    assert result.status == "failed"
+    assert "permission denied" in "; ".join(result.errors).lower()
+    assert exported.read_bytes() == b"original exported bytes"
+    assert not loudnorm_temp_files(output_dir)
+
+
+def write_fake_ffmpeg_that_creates_output_and_succeeds(tmp_path: Path) -> Path:
+    script_code = (
+        "import pathlib\n"
+        "import sys\n"
+        "destination = pathlib.Path(sys.argv[-1])\n"
+        "destination.write_bytes(b'normalized bytes')\n"
+        "print('forced normalization success', file=sys.stderr)\n"
+    )
+    script = tmp_path / "fake_ffmpeg_success.py"
+    script.write_text(script_code, encoding="utf-8")
+
+    if os.name == "nt":
+        launcher = tmp_path / "fake_ffmpeg_success.cmd"
+        launcher.write_text(
+            f'@echo off\r\n"{sys.executable}" "{script}" %*\r\n',
+            encoding="utf-8",
+        )
+        return launcher
+
+    launcher = tmp_path / "fake_ffmpeg_success"
     launcher.write_text(f"#!{sys.executable}\n{script_code}", encoding="utf-8")
     launcher.chmod(0o755)
     return launcher

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 from typing import Any, Callable
@@ -271,6 +272,7 @@ def _run_operation_without_resume(
 
     try:
         shutil.copy2(source_path, destination_path)
+        writable_warning = _make_exported_file_writable(destination_path)
         destination_size = destination_path.stat().st_size
     except OSError as exc:
         return _result(
@@ -281,6 +283,9 @@ def _run_operation_without_resume(
             warnings=warnings,
             errors=errors + [str(exc)],
         )
+
+    if writable_warning:
+        warnings.append(writable_warning)
 
     if destination_size != source_size:
         return _result(
@@ -606,6 +611,21 @@ def _text_or_none(value: Any) -> str | None:
         return None
     text = str(value)
     return text if text else None
+
+
+def _make_exported_file_writable(path: Path) -> str | None:
+    """Clear read-only mode on an exported copy without touching source files."""
+
+    try:
+        if not path.is_file():
+            return None
+        current_mode = path.stat().st_mode
+        writable_mode = current_mode | stat.S_IWRITE | stat.S_IWUSR
+        if writable_mode != current_mode:
+            path.chmod(writable_mode)
+    except OSError as exc:
+        return f"Could not make exported copy writable after copy: {exc}"
+    return None
 
 
 def _target_format_for_conversion(operation: TrackOperation, target_format: str | None) -> str:

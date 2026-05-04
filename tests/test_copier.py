@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import stat
 import sys
 from pathlib import Path
 
@@ -166,3 +167,35 @@ def test_copy_stage_does_not_overwrite_existing_destination_without_overwrite(tm
     assert result.results[0].status == STATUS_DESTINATION_EXISTS
     assert existing_destination.read_bytes() == b"existing destination bytes"
     assert source.read_bytes() == b"new source bytes"
+
+
+def test_copy_stage_clears_read_only_attribute_on_exported_copy(tmp_path):
+    source = tmp_path / "sources" / "readonly.mp3"
+    source.parent.mkdir()
+    source.write_bytes(b"readonly source bytes")
+    source.chmod(source.stat().st_mode & ~stat.S_IWRITE)
+    output_dir = tmp_path / "export"
+    output_dir.mkdir()
+    job_path = write_job(
+        tmp_path,
+        [
+            {
+                "position": 1,
+                "source_path": str(source),
+                "output_filename": "readonly.mp3",
+                "artist": "Artist",
+                "title": "Readonly",
+            }
+        ],
+    )
+    plan = build_plan_from_job(job_path, output_dir)
+
+    try:
+        result = run_copy_stage(plan=plan, final_output_dir=output_dir)
+        destination = output_dir / "readonly.mp3"
+        assert result.results[0].status == STATUS_COPIED
+        assert destination.read_bytes() == b"readonly source bytes"
+        with destination.open("ab") as handle:
+            handle.write(b" writable")
+    finally:
+        source.chmod(source.stat().st_mode | stat.S_IWRITE)

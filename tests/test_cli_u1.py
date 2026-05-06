@@ -5,13 +5,14 @@ import shutil
 import sys
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ppb.cli import main
-from ppb.copier import EXPORT_REPORT_FILENAME
+from ppb.copier import CopyStageResult, EXPORT_REPORT_FILENAME
 from ppb.contract import SUPPORTED_FORMAT
 
 
@@ -318,5 +319,175 @@ def test_cli_allows_explicit_input_type(capsys):
         )
         out = capsys.readouterr().out
         assert "Detected input type: txt" in out
+    finally:
+        cleanup_workspace(workspace)
+
+
+def test_cli_help_includes_output_format(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+    assert exc_info.value.code == 0
+    out = capsys.readouterr().out
+    assert "--output-format {mp3}" in out
+
+
+def test_cli_output_format_override_changes_dry_run_plan_and_keeps_input_json(capsys):
+    workspace = make_workspace()
+    try:
+        source = workspace / "music" / "song.flac"
+        source.parent.mkdir()
+        source.write_text("fixture", encoding="utf-8")
+        raw_job = canonical_job(
+            [
+                {
+                    "source_path": str(source),
+                    "position": 1,
+                    "artist": "Artist",
+                    "title": "Song",
+                }
+            ]
+        )
+        job = write_job(workspace, raw_job)
+        original_json = job.read_text(encoding="utf-8")
+        report = workspace / "dry_run_report.json"
+
+        main(
+            [
+                "--input",
+                str(job),
+                "--out",
+                str(workspace / "out"),
+                "--dry-run",
+                "--output-format",
+                "mp3",
+                "--report",
+                str(report),
+            ]
+        )
+
+        out = capsys.readouterr().out
+        report_data = json.loads(report.read_text(encoding="utf-8"))
+        assert "Planned copies: 0" in out
+        assert "Planned conversions: 1" in out
+        assert report_data["operations"][0]["planned_action"] == "convert"
+        assert report_data["operations"][0]["expected_output_filename"] == "01 - Artist - Song.mp3"
+        assert job.read_text(encoding="utf-8") == original_json
+        persisted = json.loads(job.read_text(encoding="utf-8"))
+        assert persisted["settings"]["output_format"] == "source"
+    finally:
+        cleanup_workspace(workspace)
+
+
+def test_cli_without_output_format_override_preserves_existing_behavior(capsys):
+    workspace = make_workspace()
+    try:
+        source = workspace / "music" / "song.flac"
+        source.parent.mkdir()
+        source.write_text("fixture", encoding="utf-8")
+        job = write_job(
+            workspace,
+            canonical_job(
+                [
+                    {
+                        "source_path": str(source),
+                        "position": 1,
+                        "artist": "Artist",
+                        "title": "Song",
+                    }
+                ]
+            ),
+        )
+
+        main(["--input", str(job), "--out", str(workspace / "out"), "--dry-run"])
+
+        out = capsys.readouterr().out
+        assert "Planned copies: 1" in out
+        assert "Planned conversions: 0" in out
+        assert "01 - Artist - Song.mp3" not in out
+    finally:
+        cleanup_workspace(workspace)
+
+
+def test_cli_output_format_override_reaches_execution_path(monkeypatch):
+    workspace = make_workspace()
+    try:
+        source = workspace / "music" / "song.flac"
+        source.parent.mkdir()
+        source.write_text("fixture", encoding="utf-8")
+        job = write_job(
+            workspace,
+            canonical_job(
+                [
+                    {
+                        "source_path": str(source),
+                        "position": 1,
+                        "artist": "Artist",
+                        "title": "Song",
+                    }
+                ]
+            ),
+        )
+        captured: dict[str, object] = {}
+
+        class DummyLogger:
+            def info(self, *args, **kwargs):
+                return None
+
+            def warning(self, *args, **kwargs):
+                return None
+
+            def error(self, *args, **kwargs):
+                return None
+
+        def fake_run_copy_stage(**kwargs):
+            captured["target_format"] = kwargs["target_format"]
+            captured["planned_actions"] = [op.planned_action for op in kwargs["plan"].operations]
+            captured["filenames"] = [op.expected_output_filename for op in kwargs["plan"].operations]
+            return CopyStageResult(
+                output_dir=str(kwargs["final_output_dir"]),
+                overwrite=bool(kwargs["overwrite"]),
+                results=[],
+            )
+
+        monkeypatch.setattr("ppb.cli.setup_export_logger", lambda output_dir: (DummyLogger(), Path(output_dir) / "export.log"))
+        monkeypatch.setattr("ppb.cli.close_export_logger", lambda logger: None)
+        monkeypatch.setattr("ppb.cli.run_copy_stage", fake_run_copy_stage)
+        monkeypatch.setattr(
+            "ppb.cli.run_loudness_measurement_stage",
+            lambda **kwargs: ([], {"totals": {}, "status": "skipped", "reason": "test"}),
+        )
+        monkeypatch.setattr(
+            "ppb.cli.run_tag_writing_stage",
+            lambda **kwargs: ([], {"totals": {}, "status": "skipped", "reason": "test"}),
+        )
+        monkeypatch.setattr(
+            "ppb.cli.generate_m3u8_playlist",
+            lambda **kwargs: SimpleNamespace(
+                status="skipped",
+                m3u_path=None,
+                track_count=0,
+                errors=[],
+                warnings=[],
+            ),
+        )
+        monkeypatch.setattr("ppb.cli.write_export_report", lambda *args, **kwargs: None)
+        monkeypatch.setattr("ppb.cli.write_export_report_text", lambda *args, **kwargs: None)
+        monkeypatch.setattr("ppb.cli.update_export_session_copy_summary", lambda *args, **kwargs: None)
+
+        main(
+            [
+                "--input",
+                str(job),
+                "--out",
+                str(workspace / "out"),
+                "--no-create-subfolder",
+                "--output-format",
+                "mp3",
+            ]
+        )
+
+        assert captured["target_format"] == "mp3"
+        assert captured["planned_actions"] == ["convert"]
+        assert captured["filenames"] == ["01 - Artist - Song.mp3"]
     finally:
         cleanup_workspace(workspace)

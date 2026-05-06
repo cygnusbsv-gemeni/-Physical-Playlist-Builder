@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -166,6 +167,14 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="BITRATE",
         help=(
             "Audio bitrate such as 192k for planned conversion."
+        ),
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=["mp3"],
+        help=(
+            "Override the effective output format for this run only. "
+            "Currently supported override: mp3."
         ),
     )
     parser.add_argument(
@@ -1688,6 +1697,15 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
     return True
 
 
+def _derive_effective_job(job, output_format_override: str | None):
+    if not output_format_override:
+        return job
+    return replace(
+        job,
+        settings=replace(job.settings, output_format=output_format_override),
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1743,10 +1761,12 @@ def main(argv: list[str] | None = None) -> None:
         )
         sys.exit(3)
 
+    effective_job = _derive_effective_job(result.job, args.output_format)
+
     try:
         target = build_output_folder_target(
             args.out,
-            result.job.playlist_name,
+            effective_job.playlist_name,
             create_subfolder=args.create_subfolder,
         )
     except OutputFolderError as exc:
@@ -1793,7 +1813,7 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit(4)
         resume_state = discover_resume_state(target.final_output_dir)
 
-    plan = build_dry_run_plan(result.job, target.final_output_dir)
+    plan = build_dry_run_plan(effective_job, target.final_output_dir)
     if resume_state is not None:
         build_resume_comparison(
             resume_state=resume_state,
@@ -1824,7 +1844,7 @@ def main(argv: list[str] | None = None) -> None:
         try:
             if resume_state is not None:
                 output_result = prepare_resume_output_folder(
-                    job=result.job,
+                    job=effective_job,
                     plan=plan,
                     target=target,
                     overwrite=args.overwrite,
@@ -1833,7 +1853,7 @@ def main(argv: list[str] | None = None) -> None:
                 )
             else:
                 output_result = create_output_folder(
-                    job=result.job,
+                    job=effective_job,
                     plan=plan,
                     target=target,
                     overwrite=args.overwrite,
@@ -1865,7 +1885,7 @@ def main(argv: list[str] | None = None) -> None:
             ffmpeg_path=args.ffmpeg,
             mp3_quality=args.mp3_quality,
             audio_bitrate=args.audio_bitrate,
-            target_format=result.job.settings.output_format,
+            target_format=effective_job.settings.output_format,
             resume_comparison=(
                 resume_state.comparison if resume_state is not None else None
             ),
@@ -1878,7 +1898,7 @@ def main(argv: list[str] | None = None) -> None:
         loudness_results, loudness_summary = run_loudness_measurement_stage(
             copy_result=copy_result,
             final_output_dir=output_result.final_output_dir,
-            settings=result.job.settings,
+            settings=effective_job.settings,
             skip_loudness=args.skip_loudness,
             skip_loudness_verification=args.skip_loudness_verification,
             ffmpeg_path=args.ffmpeg,
@@ -1887,7 +1907,7 @@ def main(argv: list[str] | None = None) -> None:
             logger=logger,
         )
         tag_results, tag_summary = run_tag_writing_stage(
-            job=result.job,
+            job=effective_job,
             copy_result=copy_result,
             final_output_dir=output_result.final_output_dir,
             skip_tags=args.skip_tags,
@@ -1898,7 +1918,7 @@ def main(argv: list[str] | None = None) -> None:
         report_txt_path = Path(output_result.final_output_dir) / EXPORT_REPORT_TEXT_FILENAME
         print("[m3u8] Generating playlist...", flush=True)
         m3u_result = generate_m3u8_playlist(
-            job=result.job,
+            job=effective_job,
             copy_result=copy_result,
             final_output_dir=output_result.final_output_dir,
             m3u_name=m3u_name,
@@ -1927,10 +1947,10 @@ def main(argv: list[str] | None = None) -> None:
                 finished_at=run_finished_at,
                 input_path=input_result.input_path,
                 final_output_dir=output_result.final_output_dir,
-                playlist_name=result.job.playlist_name,
+                playlist_name=effective_job.playlist_name,
                 report_txt_path=report_txt_path,
                 log_path=log_path,
-                write_tags_requested=result.job.settings.write_tags,
+                write_tags_requested=effective_job.settings.write_tags,
                 tag_results=tag_results,
                 tag_summary=tag_summary,
                 resume_metadata=(
@@ -1945,10 +1965,10 @@ def main(argv: list[str] | None = None) -> None:
                 loudness_summary=loudness_summary,
                 input_path=input_result.input_path,
                 final_output_dir=output_result.final_output_dir,
-                playlist_name=result.job.playlist_name,
+                playlist_name=effective_job.playlist_name,
                 report_json_path=report_path,
                 log_path=log_path,
-                write_tags_requested=result.job.settings.write_tags,
+                write_tags_requested=effective_job.settings.write_tags,
                 tag_results=tag_results,
                 tag_summary=tag_summary,
                 resume_metadata=(

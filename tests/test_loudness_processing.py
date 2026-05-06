@@ -15,7 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ppb.cli import main
+from ppb.cli import _fused_mp3_loudness_enabled, main
 from ppb.contract import SUPPORTED_FORMAT
 from ppb.ffmpeg_tools import (
     FfmpegResolutionResult,
@@ -94,6 +94,314 @@ def loudnorm_temp_files(output_dir: Path) -> list[Path]:
 def ffmpeg_or_skip() -> None:
     if not resolve_ffmpeg().ok:
         pytest.skip("ffmpeg is not available in this environment")
+
+
+def successful_measurement(source_path: Path, *, ffmpeg=None):
+    return SimpleNamespace(
+        success=True,
+        status="measured",
+        source_path=str(source_path.resolve(strict=False)),
+        input_i=-20.0,
+        input_tp=-2.0,
+        input_lra=3.0,
+        input_thresh=-30.0,
+        target_offset=0.5,
+        return_code=0,
+        stderr_summary="",
+        errors=[],
+        ffmpeg=ffmpeg,
+    )
+
+
+def test_fused_mp3_loudness_decision_requires_all_conditions():
+    enabled_job = SimpleNamespace(
+        settings=SimpleNamespace(output_format="mp3", normalize_loudness=True)
+    )
+    source_format_job = SimpleNamespace(
+        settings=SimpleNamespace(output_format="source", normalize_loudness=True)
+    )
+    no_loudness_job = SimpleNamespace(
+        settings=SimpleNamespace(output_format="mp3", normalize_loudness=False)
+    )
+
+    assert _fused_mp3_loudness_enabled(
+        effective_job=enabled_job,
+        skip_loudness=False,
+        dry_run=False,
+    )
+    assert not _fused_mp3_loudness_enabled(
+        effective_job=source_format_job,
+        skip_loudness=False,
+        dry_run=False,
+    )
+    assert not _fused_mp3_loudness_enabled(
+        effective_job=no_loudness_job,
+        skip_loudness=False,
+        dry_run=False,
+    )
+    assert not _fused_mp3_loudness_enabled(
+        effective_job=enabled_job,
+        skip_loudness=True,
+        dry_run=False,
+    )
+    assert not _fused_mp3_loudness_enabled(
+        effective_job=enabled_job,
+        skip_loudness=False,
+        dry_run=True,
+    )
+
+
+def test_cli_fused_mp3_measures_source_encodes_final_and_skips_second_loudness_pass(
+    tmp_path,
+    monkeypatch,
+):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    source_hash_before = sha256(source)
+    output_dir = tmp_path / "export"
+    destination = output_dir / "tone.mp3"
+    observed_measurement_paths: list[Path] = []
+    observed_fused_outputs: list[Path] = []
+    job = write_job(
+        tmp_path,
+        [
+            {
+                "position": 1,
+                "source_path": str(source),
+                "output_filename": destination.name,
+                "artist": "Artist",
+                "title": "Tone",
+            }
+        ],
+        output_format="mp3",
+    )
+
+    def fake_fused_measure_loudness_first_pass(**kwargs):
+        measured = Path(kwargs["source_path"]).resolve(strict=False)
+        observed_measurement_paths.append(measured)
+        return successful_measurement(measured, ffmpeg=kwargs.get("ffmpeg"))
+
+    def fake_fused_encode(**kwargs):
+        final_mp3 = Path(kwargs["final_mp3_path"]).resolve(strict=False)
+        observed_fused_outputs.append(final_mp3)
+        final_mp3.parent.mkdir(parents=True, exist_ok=True)
+        final_mp3.write_bytes(b"fused mp3 bytes")
+        return SimpleNamespace(
+            success=True,
+            status="normalized",
+            source_path=str(Path(kwargs["source_path"]).resolve(strict=False)),
+            output_path=str(final_mp3),
+            output_folder=str(Path(kwargs["final_output_dir"]).resolve(strict=False)),
+            target_format="mp3",
+            temporary_path=str(final_mp3.with_name(".tone.ppb-loudnorm-test.tmp.mp3")),
+            ffmpeg=kwargs.get("ffmpeg"),
+            return_code=0,
+            stderr_summary="fused encode progress",
+            warnings=[],
+            errors=[],
+        )
+
+    def fail_if_existing_loudness_stage_reprocesses(**kwargs):
+        raise AssertionError("fused result must not be measured or normalized a second time")
+
+    monkeypatch.setattr(
+        "ppb.copier.measure_loudness_first_pass",
+        fake_fused_measure_loudness_first_pass,
+    )
+    monkeypatch.setattr(
+        "ppb.copier.normalize_loudness_and_encode_mp3_from_source",
+        fake_fused_encode,
+    )
+    monkeypatch.setattr("ppb.cli.measure_loudness_first_pass", fail_if_existing_loudness_stage_reprocesses)
+    monkeypatch.setattr("ppb.cli.normalize_loudness_second_pass", fail_if_existing_loudness_stage_reprocesses)
+
+    main(["--input", str(job), "--out", str(output_dir), "--no-create-subfolder"])
+
+    assert observed_measurement_paths == [source.resolve(strict=False)]
+    assert observed_fused_outputs == [destination.resolve(strict=False)]
+    assert destination.read_bytes() == b"fused mp3 bytes"
+    assert sha256(source) == source_hash_before
+
+    report = read_report(output_dir)
+    track = report["tracks"][0]
+    assert track["status"] == "converted"
+    assert track["audio_action"] == "fused_loudnorm_encode"
+    assert track["measurement_source"] == "source"
+    assert track["normalization_output"] == "final_mp3"
+    assert track["output_format_effective"] == "mp3"
+    assert track["destination_path"] == str(destination.resolve(strict=False))
+    assert track["loudness_status"] == LOUDNESS_STATUS_MEASURED
+    assert track["loudness_normalization_status"] == LOUDNESS_STATUS_NORMALIZED
+    assert track["post_loudness_status"] == LOUDNESS_STATUS_SKIPPED
+    assert "fused source-to-final MP3" in track["post_loudness_skip_reason"]
+    assert report["totals"]["converted"] == 1
+    assert report["loudness_totals"][LOUDNESS_STATUS_MEASURED] == 1
+    assert report["loudness_totals"][LOUDNESS_STATUS_NORMALIZED] == 1
+
+    playlist_text = (output_dir / "playlist.m3u8").read_text(encoding="utf-8")
+    assert "tone.mp3" in playlist_text
+
+
+def test_cli_fused_mp3_dry_run_does_not_run_ffmpeg_or_create_final_mp3(tmp_path, monkeypatch):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    output_dir = tmp_path / "export"
+    job = write_job(
+        tmp_path,
+        [
+            {
+                "position": 1,
+                "source_path": str(source),
+                "output_filename": "tone.mp3",
+                "artist": "Artist",
+                "title": "Tone",
+            }
+        ],
+        output_format="mp3",
+    )
+
+    def fail_if_ffmpeg_runs(**kwargs):
+        raise AssertionError("dry-run must not run fused FFmpeg helpers")
+
+    monkeypatch.setattr("ppb.copier.measure_loudness_first_pass", fail_if_ffmpeg_runs)
+    monkeypatch.setattr(
+        "ppb.copier.normalize_loudness_and_encode_mp3_from_source",
+        fail_if_ffmpeg_runs,
+    )
+
+    main(["--input", str(job), "--out", str(output_dir), "--no-create-subfolder", "--dry-run"])
+
+    assert not output_dir.exists()
+    assert not (output_dir / "tone.mp3").exists()
+
+
+def test_cli_fused_mp3_encode_failure_removes_unsuccessful_final_output(tmp_path, monkeypatch):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    source_hash_before = sha256(source)
+    output_dir = tmp_path / "export"
+    destination = output_dir / "tone.mp3"
+    job = write_job(
+        tmp_path,
+        [
+            {
+                "position": 1,
+                "source_path": str(source),
+                "output_filename": destination.name,
+                "artist": "Artist",
+                "title": "Tone",
+            }
+        ],
+        output_format="mp3",
+    )
+
+    def fake_fused_measure_loudness_first_pass(**kwargs):
+        return successful_measurement(Path(kwargs["source_path"]), ffmpeg=kwargs.get("ffmpeg"))
+
+    def fake_failed_fused_encode(**kwargs):
+        final_mp3 = Path(kwargs["final_mp3_path"]).resolve(strict=False)
+        final_mp3.parent.mkdir(parents=True, exist_ok=True)
+        final_mp3.write_bytes(b"unsuccessful final bytes")
+        return SimpleNamespace(
+            success=False,
+            status="failed",
+            source_path=str(Path(kwargs["source_path"]).resolve(strict=False)),
+            output_path=str(final_mp3),
+            output_folder=str(Path(kwargs["final_output_dir"]).resolve(strict=False)),
+            target_format="mp3",
+            temporary_path=str(final_mp3.with_name(".tone.ppb-loudnorm-test.tmp.mp3")),
+            ffmpeg=kwargs.get("ffmpeg"),
+            return_code=1,
+            stderr_summary="forced fused encode failure",
+            warnings=[],
+            errors=["forced fused encode failure"],
+        )
+
+    monkeypatch.setattr(
+        "ppb.copier.measure_loudness_first_pass",
+        fake_fused_measure_loudness_first_pass,
+    )
+    monkeypatch.setattr(
+        "ppb.copier.normalize_loudness_and_encode_mp3_from_source",
+        fake_failed_fused_encode,
+    )
+
+    main(["--input", str(job), "--out", str(output_dir), "--no-create-subfolder"])
+
+    assert not destination.exists()
+    assert sha256(source) == source_hash_before
+
+    report = read_report(output_dir)
+    track = report["tracks"][0]
+    assert track["status"] == "failed"
+    assert track["audio_action"] == "fused_loudnorm_encode"
+    assert track["loudness_status"] == LOUDNESS_STATUS_MEASURED
+    assert track["loudness_normalization_status"] == LOUDNESS_STATUS_FAILED
+    assert "forced fused encode failure" in track["loudness_normalization_error"]
+
+    playlist_text = (output_dir / "playlist.m3u8").read_text(encoding="utf-8")
+    assert "tone.mp3" not in playlist_text
+
+
+def test_cli_fused_mp3_measurement_failure_does_not_encode_or_create_final_mp3(
+    tmp_path,
+    monkeypatch,
+):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    output_dir = tmp_path / "export"
+    destination = output_dir / "tone.mp3"
+    job = write_job(
+        tmp_path,
+        [
+            {
+                "position": 1,
+                "source_path": str(source),
+                "output_filename": destination.name,
+                "artist": "Artist",
+                "title": "Tone",
+            }
+        ],
+        output_format="mp3",
+    )
+
+    def fake_failed_measurement(**kwargs):
+        measured = Path(kwargs["source_path"]).resolve(strict=False)
+        return SimpleNamespace(
+            success=False,
+            status="failed",
+            source_path=str(measured),
+            input_i=None,
+            input_tp=None,
+            input_lra=None,
+            input_thresh=None,
+            target_offset=None,
+            return_code=1,
+            stderr_summary="forced measurement failure",
+            errors=["forced measurement failure"],
+            ffmpeg=kwargs.get("ffmpeg"),
+        )
+
+    def fail_if_encode_runs(**kwargs):
+        raise AssertionError("fused encode must not run after measurement failure")
+
+    monkeypatch.setattr("ppb.copier.measure_loudness_first_pass", fake_failed_measurement)
+    monkeypatch.setattr(
+        "ppb.copier.normalize_loudness_and_encode_mp3_from_source",
+        fail_if_encode_runs,
+    )
+
+    main(["--input", str(job), "--out", str(output_dir), "--no-create-subfolder"])
+
+    assert not destination.exists()
+    report = read_report(output_dir)
+    track = report["tracks"][0]
+    assert track["status"] == "failed"
+    assert track["audio_action"] == "fused_loudnorm_encode"
+    assert track["measurement_source"] == "source"
+    assert track["loudness_status"] == LOUDNESS_STATUS_FAILED
+    assert track["loudness_normalization_status"] == LOUDNESS_STATUS_FAILED
+    assert "forced measurement failure" in track["loudness_error"]
 
 
 def test_cli_normalize_loudness_success_reports_logs_m3u_and_preserves_source(tmp_path):
@@ -216,6 +524,12 @@ def test_cli_loudness_processing_uses_exported_copy_paths_not_sources(tmp_path, 
 
     monkeypatch.setattr("ppb.cli.measure_loudness_first_pass", fake_measure_loudness_first_pass)
     monkeypatch.setattr("ppb.cli.normalize_loudness_second_pass", fake_normalize_loudness_second_pass)
+    monkeypatch.setattr(
+        "ppb.copier.normalize_loudness_and_encode_mp3_from_source",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("output_format=source must keep the exported-copy loudness pipeline")
+        ),
+    )
 
     main(["--input", str(job), "--out", str(output_dir), "--no-create-subfolder"])
 

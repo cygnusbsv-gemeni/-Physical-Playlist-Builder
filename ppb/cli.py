@@ -719,6 +719,7 @@ def run_tag_writing_stage(
         1
         for result in copy_result.results
         if result.status in {STATUS_COPIED, STATUS_CONVERTED}
+        or getattr(result, "audio_action", None) == "fused_loudnorm_encode"
     )
     should_write = write_tags_requested and not skip_tags
     reason = _tag_skip_reason(
@@ -875,6 +876,14 @@ def run_loudness_measurement_stage(
 
     eligible_index = 0
     for track_result in copy_result.results:
+        if getattr(track_result, "audio_action", None) == "fused_loudnorm_encode":
+            fused_result = _fused_loudness_result_from_track_result(track_result)
+            results.append(fused_result)
+            _log_loudness_track_result(logger, track_result, fused_result)
+            _log_loudness_normalization_track_result(logger, track_result, fused_result)
+            _log_post_loudness_track_result(logger, track_result, fused_result)
+            continue
+
         if track_result.status == STATUS_RESUMED:
             skip_result = _loudness_skipped_result(
                 "track was reused by resume; loudness processing was skipped to avoid modifying it.",
@@ -1086,6 +1095,67 @@ def run_loudness_measurement_stage(
         verification_totals.get(LOUDNESS_STATUS_FFMPEG_MISSING, 0),
     )
     return results, summary
+
+
+def _fused_loudness_result_from_track_result(track_result) -> dict[str, Any]:
+    post_status = getattr(track_result, "post_loudness_status", None) or LOUDNESS_STATUS_SKIPPED
+    post_reason = getattr(track_result, "post_loudness_skip_reason", None) or (
+        "post-normalization verification was skipped for fused source-to-final MP3 export."
+    )
+    return {
+        "audio_action": getattr(track_result, "audio_action", None),
+        "measurement_source": getattr(track_result, "measurement_source", None),
+        "normalization_output": getattr(track_result, "normalization_output", None),
+        "output_format_effective": getattr(track_result, "output_format_effective", None),
+        "loudness_status": getattr(track_result, "loudness_status", None) or LOUDNESS_STATUS_SKIPPED,
+        "input_i": getattr(track_result, "input_i", None),
+        "input_tp": getattr(track_result, "input_tp", None),
+        "input_lra": getattr(track_result, "input_lra", None),
+        "input_thresh": getattr(track_result, "input_thresh", None),
+        "target_offset": getattr(track_result, "target_offset", None),
+        "loudness_error": getattr(track_result, "loudness_error", None),
+        "loudness_stderr_summary": getattr(track_result, "loudness_stderr_summary", ""),
+        "loudness_skip_reason": getattr(track_result, "loudness_skip_reason", None),
+        "loudness_measured_path": getattr(track_result, "loudness_measured_path", None),
+        "loudness_return_code": getattr(track_result, "loudness_return_code", None),
+        "loudness_normalization_status": (
+            getattr(track_result, "loudness_normalization_status", None)
+            or LOUDNESS_STATUS_SKIPPED
+        ),
+        "normalized_output_path": getattr(track_result, "normalized_output_path", None),
+        "loudness_normalization_error": getattr(
+            track_result,
+            "loudness_normalization_error",
+            None,
+        ),
+        "loudness_normalization_stderr_summary": getattr(
+            track_result,
+            "loudness_normalization_stderr_summary",
+            "",
+        ),
+        "loudness_normalization_skip_reason": getattr(
+            track_result,
+            "loudness_normalization_skip_reason",
+            None,
+        ),
+        "loudness_normalization_return_code": getattr(
+            track_result,
+            "loudness_normalization_return_code",
+            None,
+        ),
+        "size_after_export_before_loudness": getattr(
+            track_result,
+            "size_after_export_before_loudness",
+            None,
+        ),
+        "size_after_loudness": getattr(track_result, "size_after_loudness", None),
+        "final_size": getattr(track_result, "final_size", None),
+        **_post_loudness_skipped_result(
+            post_reason,
+            measured_path=getattr(track_result, "post_loudness_measured_path", None),
+        ),
+        "post_loudness_status": post_status,
+    }
 
 
 def _loudness_skip_reason(
@@ -1706,6 +1776,16 @@ def _derive_effective_job(job, output_format_override: str | None):
     )
 
 
+def _fused_mp3_loudness_enabled(*, effective_job, skip_loudness: bool, dry_run: bool) -> bool:
+    settings = effective_job.settings
+    return (
+        settings.output_format == "mp3"
+        and bool(settings.normalize_loudness)
+        and not skip_loudness
+        and not dry_run
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1762,6 +1842,11 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(3)
 
     effective_job = _derive_effective_job(result.job, args.output_format)
+    fused_loudness_enabled = _fused_mp3_loudness_enabled(
+        effective_job=effective_job,
+        skip_loudness=args.skip_loudness,
+        dry_run=args.dry_run,
+    )
 
     try:
         target = build_output_folder_target(
@@ -1886,6 +1971,14 @@ def main(argv: list[str] | None = None) -> None:
             mp3_quality=args.mp3_quality,
             audio_bitrate=args.audio_bitrate,
             target_format=effective_job.settings.output_format,
+            fused_loudness_enabled=fused_loudness_enabled,
+            fused_target_lufs=effective_job.settings.target_lufs,
+            fused_true_peak_db=effective_job.settings.true_peak_db,
+            fused_loudness_range_lufs=getattr(
+                effective_job.settings,
+                "loudness_range_lufs",
+                DEFAULT_LOUDNESS_RANGE_LUFS,
+            ),
             resume_comparison=(
                 resume_state.comparison if resume_state is not None else None
             ),

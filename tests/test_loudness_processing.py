@@ -229,6 +229,101 @@ def test_cli_loudness_processing_uses_exported_copy_paths_not_sources(tmp_path, 
     assert source.resolve(strict=False) not in observed_normalization_paths
 
 
+def test_cli_skip_loudness_verification_avoids_post_measurement_and_reports_progress(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    source_hash_before = sha256(source)
+    output_dir = tmp_path / "export"
+    destination = output_dir / "tone.wav"
+    observed_measurement_paths: list[Path] = []
+    observed_normalization_paths: list[Path] = []
+    job = write_job(
+        tmp_path,
+        [
+            {
+                "position": 1,
+                "source_path": str(source),
+                "output_filename": destination.name,
+                "artist": "Artist",
+                "title": "Tone",
+            }
+        ],
+    )
+
+    def fake_measure_loudness_first_pass(**kwargs):
+        measured = Path(kwargs["source_path"]).resolve(strict=False)
+        observed_measurement_paths.append(measured)
+        return SimpleNamespace(
+            success=True,
+            status="measured",
+            input_i=-20.0,
+            input_tp=-2.0,
+            input_lra=3.0,
+            input_thresh=-30.0,
+            target_offset=0.5,
+            return_code=0,
+            stderr_summary="",
+            errors=[],
+            ffmpeg=kwargs.get("ffmpeg"),
+        )
+
+    def fake_normalize_loudness_second_pass(**kwargs):
+        exported = Path(kwargs["exported_path"]).resolve(strict=False)
+        observed_normalization_paths.append(exported)
+        return SimpleNamespace(
+            success=True,
+            status="normalized",
+            output_path=str(exported),
+            return_code=0,
+            stderr_summary="",
+            errors=[],
+            ffmpeg=kwargs.get("ffmpeg"),
+        )
+
+    monkeypatch.setattr("ppb.cli.measure_loudness_first_pass", fake_measure_loudness_first_pass)
+    monkeypatch.setattr("ppb.cli.normalize_loudness_second_pass", fake_normalize_loudness_second_pass)
+
+    main(
+        [
+            "--input",
+            str(job),
+            "--out",
+            str(output_dir),
+            "--no-create-subfolder",
+            "--skip-loudness-verification",
+        ]
+    )
+
+    out = capsys.readouterr().out
+    assert "[loudness] Starting:" in out
+    assert "verification=skipped" in out
+    assert "[loudness] 1/1 measuring:" in out
+    assert "[loudness] 1/1 normalizing:" in out
+    assert "[loudness] 1/1 verifying:" not in out
+
+    assert destination.is_file()
+    assert sha256(source) == source_hash_before
+    assert observed_measurement_paths == [destination.resolve(strict=False)]
+    assert observed_normalization_paths == [destination.resolve(strict=False)]
+
+    report = read_report(output_dir)
+    track = report["tracks"][0]
+    assert track["loudness_status"] == LOUDNESS_STATUS_MEASURED
+    assert track["loudness_normalization_status"] == LOUDNESS_STATUS_NORMALIZED
+    assert track["post_loudness_status"] == LOUDNESS_STATUS_SKIPPED
+    assert "--skip-loudness-verification" in track["post_loudness_skip_reason"]
+    assert report["loudness"]["skip_loudness_verification"] is True
+    assert report["loudness_verification_totals"]["verified"] == 0
+    assert report["loudness_verification_totals"][LOUDNESS_STATUS_SKIPPED] == 1
+
+    report_text = (output_dir / "export_report.txt").read_text(encoding="utf-8")
+    assert "Post-normalization verification skipped: 1" in report_text
+
+
 def test_resolved_integrated_loudness_warning_is_preserved_as_input_warning_only(tmp_path, monkeypatch):
     source = tmp_path / "sources" / "tone.wav"
     write_sine_wav(source)

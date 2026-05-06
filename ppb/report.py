@@ -419,6 +419,7 @@ def write_export_report_text(
         f"Failed: {loudness_totals.get(LOUDNESS_STATUS_FAILED, 0)}",
         f"FFmpeg missing: {loudness_totals.get(LOUDNESS_STATUS_FFMPEG_MISSING, 0)}",
         f"Post-normalization verified: {verification_totals.get('verified', 0)}",
+        f"Post-normalization verification skipped: {verification_totals.get(LOUDNESS_STATUS_SKIPPED, 0)}",
         f"Post-normalization verification failed: {verification_totals.get('verification_failed', 0)}",
         "",
         "Tag Writing",

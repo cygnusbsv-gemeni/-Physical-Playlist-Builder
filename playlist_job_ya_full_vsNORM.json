@@ -1,6 +1,6 @@
 {
   "format": "physical_playlist_job.v1",
-  "generated_at": "2026-05-04T11:54:12.439492+00:00",
+  "generated_at": "2026-05-04T05:05:50.575782+00:00",
   "playlist": {
     "description": "Imported from plain text track list",
     "name": "ya_full",
@@ -11,7 +11,7 @@
     "job_filename": "playlist_job.json",
     "producer": "MusicLib Web",
     "producer_format": "musiclib.export_plan.v1",
-    "producer_generated_at": "2026-05-04T11:54:12.396470+00:00",
+    "producer_generated_at": "2026-05-04T05:05:50.534397+00:00",
     "producer_stage": "prepare_only",
     "source_playlist_id": "1e613f8f-ed5c-4a07-bc8c-d6fdd6c4fb73",
     "warnings": [
@@ -53,7 +53,7 @@
     "filename_template": "{position:02d} - {artist} - {title}",
     "generate_m3u8": true,
     "normalize_loudness": true,
-    "output_format": "mp3",
+    "output_format": "source",
     "target_lufs": -14,
     "true_peak_db": -1.5,
     "write_tags": true
@@ -565,21 +565,21 @@
       "codec": "FLAC",
       "date": "2002",
       "duration_sec": 200.267,
-      "filename_hint": "12 - Cash, Johnny - Personal Jesus.mp3",
+      "filename_hint": "12 - Cash, Johnny - Personal Jesus.flac",
       "genre": "Country",
-      "output_filename": "12 - Cash, Johnny - Personal Jesus.mp3",
+      "output_filename": "12 - Cash, Johnny - Personal Jesus.flac",
       "position": 12,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 59,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\Cash\\2002 - American IV - The Man Comes Around\\07 - Personal Jesus.flac",
@@ -973,21 +973,21 @@
       "codec": "FLAC",
       "date": "2006",
       "duration_sec": 253.947,
-      "filename_hint": "21 - Moby - Natural Blues Katcha Remix.mp3",
+      "filename_hint": "21 - Moby - Natural Blues Katcha Remix.flac",
       "genre": "Electronic",
-      "output_filename": "21 - Moby - Natural Blues Katcha Remix.mp3",
+      "output_filename": "21 - Moby - Natural Blues Katcha Remix.flac",
       "position": 21,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 68,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\electro\\MOBY\\2007 - Go-The Very Best Of Moby - Remixed [XCD MUTEL 14, 0094638859925]\\01-Natural Blues Katcha Remix.flac",
@@ -1727,21 +1727,21 @@
       "codec": "FLAC",
       "date": "2021-01-01",
       "duration_sec": 269.829,
-      "filename_hint": "38 - The Black Keys - Ten Cent Pistol.mp3",
+      "filename_hint": "38 - The Black Keys - Ten Cent Pistol.flac",
       "genre": "Alternative",
-      "output_filename": "38 - The Black Keys - Ten Cent Pistol.mp3",
+      "output_filename": "38 - The Black Keys - Ten Cent Pistol.flac",
       "position": 38,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 85,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 48000,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys - 2010 - Brothers (Deluxe Remastered Anniversary Edition) (24bit-48kHz)\\09 Ten Cent Pistol.flac",
@@ -1815,21 +1815,21 @@
       "codec": "FLAC",
       "date": "2003",
       "duration_sec": 201.387,
-      "filename_hint": "40 - Созвездие хитов - Голубой вагон.mp3",
+      "filename_hint": "40 - Созвездие хитов - Голубой вагон.flac",
       "genre": "Other",
-      "output_filename": "40 - Созвездие хитов - Голубой вагон.mp3",
+      "output_filename": "40 - Созвездие хитов - Голубой вагон.flac",
       "position": 40,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 87,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "D:\\Music\\Детское\\sozvezdie.hitov\\Sozvezdie.hitov.Detskie.pesenki vol.1\\07 – Голубой вагон.flac",
@@ -1903,21 +1903,21 @@
       "codec": "FLAC",
       "date": "2004",
       "duration_sec": 234.081,
-      "filename_hint": "42 - The Black Keys - The Desperate Man.mp3",
+      "filename_hint": "42 - The Black Keys - The Desperate Man.flac",
       "genre": "Blues Rock",
-      "output_filename": "42 - The Black Keys - The Desperate Man.mp3",
+      "output_filename": "42 - The Black Keys - The Desperate Man.flac",
       "position": 42,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 89,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 96000,
       "source_path": "I:\\Music\\00_new_old\\The Black Keys (LP)\\2004 - Rubber Factory (LP)\\A5 - The Desperate Man.flac",
@@ -2915,21 +2915,21 @@
       "codec": "FLAC",
       "date": "2018",
       "duration_sec": 123.072,
-      "filename_hint": "65 - Víkingur Ólafsson - Prelude & Fugue in E Minor (Well-Tempered Clavier, Book I, No. 10), BWV 855 - 1. Prelude.mp3",
+      "filename_hint": "65 - Víkingur Ólafsson - Prelude & Fugue in E Minor (Well-Tempered Clavier, Book I, No. 10), BWV 855 - 1. Prelude.flac",
       "genre": "Classical",
-      "output_filename": "65 - Víkingur Ólafsson - Prelude & Fugue in E Minor (Well-Tempered Clavier, Book I, No. 10), BWV 855 - 1. Prelude.mp3",
+      "output_filename": "65 - Víkingur Ólafsson - Prelude & Fugue in E Minor (Well-Tempered Clavier, Book I, No. 10), BWV 855 - 1. Prelude.flac",
       "position": 65,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 112,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 96000,
       "source_path": "D:\\Music\\000_Избранное наборы\\Source\\Мать\\Vikingur Olafsson - Johann Sebastian Bach (2018) [24-96]\\03. Prelude & Fugue in E Minor (Well-Tempered Clavier, Book I, No. 10), BWV 855 - 1. Prelude.flac",
@@ -3795,21 +3795,21 @@
       "codec": "FLAC",
       "date": "2004",
       "duration_sec": 221.507,
-      "filename_hint": "85 - Paris combo - Reflet.mp3",
+      "filename_hint": "85 - Paris combo - Reflet.flac",
       "genre": "Chanson francaise",
-      "output_filename": "85 - Paris combo - Reflet.mp3",
+      "output_filename": "85 - Paris combo - Reflet.flac",
       "position": 85,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 132,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\Paris\\[2004] Paris combo - Motifs\\(09) Reflet.flac",
@@ -4367,21 +4367,21 @@
       "codec": "FLAC",
       "date": "2014",
       "duration_sec": 314.514,
-      "filename_hint": "98 - Steppenwolf - Hoochie Coochie Man.mp3",
+      "filename_hint": "98 - Steppenwolf - Hoochie Coochie Man.flac",
       "genre": "Rock",
-      "output_filename": "98 - Steppenwolf - Hoochie Coochie Man.mp3",
+      "output_filename": "98 - Steppenwolf - Hoochie Coochie Man.flac",
       "position": 98,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 145,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 192000,
       "source_path": "I:\\Music\\Steppenwolf - Steppenwolf 1968 (2014) [192-24]\\04-Hoochie Coochie Man.flac",
@@ -4499,21 +4499,21 @@
       "codec": "FLAC",
       "date": "2001",
       "duration_sec": 250.493,
-      "filename_hint": "101 - ВИА Пламя - Снег кружится.mp3",
+      "filename_hint": "101 - ВИА Пламя - Снег кружится.flac",
       "genre": "Pop",
-      "output_filename": "101 - ВИА Пламя - Снег кружится.mp3",
+      "output_filename": "101 - ВИА Пламя - Снег кружится.flac",
       "position": 101,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 148,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\ВИА Пламя - Grand Collection(2001)\\03 - Снег кружится.flac",
@@ -4857,21 +4857,21 @@
       "codec": "FLAC",
       "date": "2001",
       "duration_sec": 296.52,
-      "filename_hint": "109 - ABBA - The Winner Takes It All.mp3",
+      "filename_hint": "109 - ABBA - The Winner Takes It All.flac",
       "genre": "Pop",
-      "output_filename": "109 - ABBA - The Winner Takes It All.mp3",
+      "output_filename": "109 - ABBA - The Winner Takes It All.flac",
       "position": 109,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 156,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Pop\\ABBA 2001 - The Definitive Collection\\CD2\\05 - The Winner Takes It All.flac",
@@ -4989,21 +4989,21 @@
       "codec": "FLAC",
       "date": null,
       "duration_sec": 209.24,
-      "filename_hint": "112 - Charles Aznavour - Une vie d'amour.mp3",
+      "filename_hint": "112 - Charles Aznavour - Une vie d'amour.flac",
       "genre": null,
-      "output_filename": "112 - Charles Aznavour - Une vie d'amour.mp3",
+      "output_filename": "112 - Charles Aznavour - Une vie d'amour.flac",
       "position": 112,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 159,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\Aznavour Charles\\Charles Aznavour - 13 Une vie d'amour.flac",
@@ -5121,21 +5121,21 @@
       "codec": "FLAC",
       "date": "1987 / 2020",
       "duration_sec": 239.12,
-      "filename_hint": "115 - ЛКО п_у Анатолия Бадхена _ Валерий Абдурахманов - Вальс (Из кинофильма «Берегись автомобиля»).mp3",
+      "filename_hint": "115 - ЛКО п_у Анатолия Бадхена _ Валерий Абдурахманов - Вальс (Из кинофильма «Берегись автомобиля»).flac",
       "genre": "Film score",
-      "output_filename": "115 - ЛКО п_у Анатолия Бадхена _ Валерий Абдурахманов - Вальс (Из кинофильма «Берегись автомобиля»).mp3",
+      "output_filename": "115 - ЛКО п_у Анатолия Бадхена _ Валерий Абдурахманов - Вальс (Из кинофильма «Берегись автомобиля»).flac",
       "position": 115,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 162,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "D:\\Music\\000_Избранное наборы\\Source\\Мать\\Андрей Петров - Любовь моя - кино (1987) (2020, Мелодия, MEL CO 0576) [24 bit ~ 44.1 kHz]\\02 Вальс (Из кинофильма «Берегись автомобиля»).flac",
@@ -5517,21 +5517,21 @@
       "codec": "FLAC",
       "date": "1966",
       "duration_sec": 312.748,
-      "filename_hint": "124 - John Lee Hooker - It Serves You Right To Suffer.mp3",
+      "filename_hint": "124 - John Lee Hooker - It Serves You Right To Suffer.flac",
       "genre": "Blues",
-      "output_filename": "124 - John Lee Hooker - It Serves You Right To Suffer.mp3",
+      "output_filename": "124 - John Lee Hooker - It Serves You Right To Suffer.flac",
       "position": 124,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 171,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 96000,
       "source_path": "D:\\Music\\000_Избранное наборы\\Source\\2025_11\\1966. John Lee Hooker - It Serves You Right To Suffer (2013) [24-96]\\08. It Serves You Right To Suffer.flac",
@@ -5561,21 +5561,21 @@
       "codec": "FLAC",
       "date": "2001",
       "duration_sec": 227.6,
-      "filename_hint": "125 - ABBA - Head Over Heels.mp3",
+      "filename_hint": "125 - ABBA - Head Over Heels.flac",
       "genre": "Pop",
-      "output_filename": "125 - ABBA - Head Over Heels.mp3",
+      "output_filename": "125 - ABBA - Head Over Heels.flac",
       "position": 125,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 172,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Pop\\ABBA 2001 - The Definitive Collection\\CD2\\11 - Head Over Heels.flac",
@@ -5605,21 +5605,21 @@
       "codec": "FLAC",
       "date": "2006",
       "duration_sec": 180.787,
-      "filename_hint": "126 - The Black Keys - Just Got To Be.mp3",
+      "filename_hint": "126 - The Black Keys - Just Got To Be.flac",
       "genre": "Blues Rock",
-      "output_filename": "126 - The Black Keys - Just Got To Be.mp3",
+      "output_filename": "126 - The Black Keys - Just Got To Be.flac",
       "position": 126,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 173,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys\\2006 - Magic Potion (Japan Edition)\\01 - Just Got To Be.flac",
@@ -6001,21 +6001,21 @@
       "codec": "FLAC",
       "date": "1969/2021",
       "duration_sec": 263.933,
-      "filename_hint": "135 - Frank Sinatra, Willie Nelson - My Way (Duet with Willie Nelson).mp3",
+      "filename_hint": "135 - Frank Sinatra, Willie Nelson - My Way (Duet with Willie Nelson).flac",
       "genre": "Vocal-Jazz, Jazz",
-      "output_filename": "135 - Frank Sinatra, Willie Nelson - My Way (Duet with Willie Nelson).mp3",
+      "output_filename": "135 - Frank Sinatra, Willie Nelson - My Way (Duet with Willie Nelson).flac",
       "position": 135,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 182,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 176400,
       "source_path": "E:\\YandexDisk\\Music\\_hiRes\\Jazz\\Frank Sinatra - My Way - 50th Anniversary Edition SACD (2021) - FLAC\\11 - Frank Sinatra, Willie Nelson - My Way.flac",
@@ -6133,21 +6133,21 @@
       "codec": "FLAC",
       "date": "2018",
       "duration_sec": 188.091,
-      "filename_hint": "138 - Víkingur Ólafsson - Ich ruf zu dir Herr Jesu Christ, Chorale Prelude BWV 639 (Transcr. by Ferruccio Busoni).mp3",
+      "filename_hint": "138 - Víkingur Ólafsson - Ich ruf zu dir Herr Jesu Christ, Chorale Prelude BWV 639 (Transcr. by Ferruccio Busoni).flac",
       "genre": "Classical",
-      "output_filename": "138 - Víkingur Ólafsson - Ich ruf zu dir Herr Jesu Christ, Chorale Prelude BWV 639 (Transcr. by Ferruccio Busoni).mp3",
+      "output_filename": "138 - Víkingur Ólafsson - Ich ruf zu dir Herr Jesu Christ, Chorale Prelude BWV 639 (Transcr. by Ferruccio Busoni).flac",
       "position": 138,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 185,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 96000,
       "source_path": "D:\\Music\\000_Избранное наборы\\Source\\Мать\\Vikingur Olafsson - Johann Sebastian Bach (2018) [24-96]\\33. Ich ruf zu dir Herr Jesu Christ, Chorale Prelude BWV 639 (Transcr. by Ferruccio Busoni).flac",
@@ -7195,21 +7195,21 @@
       "codec": "FLAC",
       "date": "1966",
       "duration_sec": 337.494,
-      "filename_hint": "162 - John Lee Hooker - Country Boy.mp3",
+      "filename_hint": "162 - John Lee Hooker - Country Boy.flac",
       "genre": "Blues",
-      "output_filename": "162 - John Lee Hooker - Country Boy.mp3",
+      "output_filename": "162 - John Lee Hooker - Country Boy.flac",
       "position": 162,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 209,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 96000,
       "source_path": "D:\\Music\\000_Избранное наборы\\Source\\2025_11\\1966. John Lee Hooker - It Serves You Right To Suffer (2013) [24-96]\\02. Country Boy.flac",
@@ -7239,21 +7239,21 @@
       "codec": "FLAC",
       "date": "2021-01-01",
       "duration_sec": 145.959,
-      "filename_hint": "163 - The Black Keys - Chop and Change.mp3",
+      "filename_hint": "163 - The Black Keys - Chop and Change.flac",
       "genre": "Alternative",
-      "output_filename": "163 - The Black Keys - Chop and Change.mp3",
+      "output_filename": "163 - The Black Keys - Chop and Change.flac",
       "position": 163,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 210,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 48000,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys - 2010 - Brothers (Deluxe Remastered Anniversary Edition) (24bit-48kHz)\\16 Chop and Change.flac",
@@ -8471,21 +8471,21 @@
       "codec": "FLAC",
       "date": "2001",
       "duration_sec": 173.587,
-      "filename_hint": "191 - ВИА Пламя - Не надо печалиться.mp3",
+      "filename_hint": "191 - ВИА Пламя - Не надо печалиться.flac",
       "genre": "Pop",
-      "output_filename": "191 - ВИА Пламя - Не надо печалиться.mp3",
+      "output_filename": "191 - ВИА Пламя - Не надо печалиться.flac",
       "position": 191,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 238,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\ВИА Пламя - Grand Collection(2001)\\01 - Не надо печалиться.flac",
@@ -8873,21 +8873,21 @@
       "codec": "FLAC",
       "date": "1997",
       "duration_sec": 207.76,
-      "filename_hint": "200 - ЛЕЙСЯ, ПЕСНЯ! - Где же ты была.mp3",
+      "filename_hint": "200 - ЛЕЙСЯ, ПЕСНЯ! - Где же ты была.flac",
       "genre": "Pop",
-      "output_filename": "200 - ЛЕЙСЯ, ПЕСНЯ! - Где же ты была.mp3",
+      "output_filename": "200 - ЛЕЙСЯ, ПЕСНЯ! - Где же ты была.flac",
       "position": 200,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 247,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\Various Artists - Золотой шлягер 70-х Russian Collection 1973-1979 Volume 4\\11. ЛЕЙСЯ, ПЕСНЯ! - Где же ты была.flac",
@@ -8917,21 +8917,21 @@
       "codec": "FLAC",
       "date": "1997",
       "duration_sec": 287.067,
-      "filename_hint": "201 - ЛЕЙСЯ, ПЕСНЯ! - Прощай.mp3",
+      "filename_hint": "201 - ЛЕЙСЯ, ПЕСНЯ! - Прощай.flac",
       "genre": "Pop",
-      "output_filename": "201 - ЛЕЙСЯ, ПЕСНЯ! - Прощай.mp3",
+      "output_filename": "201 - ЛЕЙСЯ, ПЕСНЯ! - Прощай.flac",
       "position": 201,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 248,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\Various Artists - Золотой шлягер 70-х Russian Collection 1973-1979 Volume 4\\02. ЛЕЙСЯ, ПЕСНЯ! - Прощай.flac",
@@ -9181,21 +9181,21 @@
       "codec": "FLAC",
       "date": "2012",
       "duration_sec": 180.56,
-      "filename_hint": "207 - Max Richter, Daniel Hope, Raphael Alpermann & Konzerthaus Kammerorchester Berlin - Winter 1.mp3",
+      "filename_hint": "207 - Max Richter, Daniel Hope, Raphael Alpermann & Konzerthaus Kammerorchester Berlin - Winter 1.flac",
       "genre": "Classical",
-      "output_filename": "207 - Max Richter, Daniel Hope, Raphael Alpermann & Konzerthaus Kammerorchester Berlin - Winter 1.mp3",
+      "output_filename": "207 - Max Richter, Daniel Hope, Raphael Alpermann & Konzerthaus Kammerorchester Berlin - Winter 1.flac",
       "position": 207,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 254,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 96000,
       "source_path": "E:\\YandexDisk\\Music\\hiRes\\Classical\\Max Richter [24-bit]\\Max Richter - 2012 - Recomposed By Max Richter, Vivaldi - The Four Seasons\\11 - Winter 1.flac",
@@ -9539,21 +9539,21 @@
       "codec": "FLAC",
       "date": "2012",
       "duration_sec": 300.88,
-      "filename_hint": "215 - Max Richter, Daniel Hope, Raphael Alpermann & Konzerthaus Kammerorchester Berlin - Summer 3.mp3",
+      "filename_hint": "215 - Max Richter, Daniel Hope, Raphael Alpermann & Konzerthaus Kammerorchester Berlin - Summer 3.flac",
       "genre": "Classical",
-      "output_filename": "215 - Max Richter, Daniel Hope, Raphael Alpermann & Konzerthaus Kammerorchester Berlin - Summer 3.mp3",
+      "output_filename": "215 - Max Richter, Daniel Hope, Raphael Alpermann & Konzerthaus Kammerorchester Berlin - Summer 3.flac",
       "position": 215,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 262,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 96000,
       "source_path": "E:\\YandexDisk\\Music\\hiRes\\Classical\\Max Richter [24-bit]\\Max Richter - 2012 - Recomposed By Max Richter, Vivaldi - The Four Seasons\\07 - Summer 3.flac",
@@ -9935,21 +9935,21 @@
       "codec": "FLAC",
       "date": "2012",
       "duration_sec": 222.093,
-      "filename_hint": "224 - Chris Botti - Summertime.mp3",
+      "filename_hint": "224 - Chris Botti - Summertime.flac",
       "genre": "Jazz",
-      "output_filename": "224 - Chris Botti - Summertime.mp3",
+      "output_filename": "224 - Chris Botti - Summertime.flac",
       "position": 224,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 271,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\Chris Botti-Impressions (2012) [FLAC]\\10 Summertime.flac",
@@ -10023,21 +10023,21 @@
       "codec": "FLAC",
       "date": "2013",
       "duration_sec": 328.832,
-      "filename_hint": "226 - The Dave Brubeck Quartet - Take Five.mp3",
+      "filename_hint": "226 - The Dave Brubeck Quartet - Take Five.flac",
       "genre": "Jazz",
-      "output_filename": "226 - The Dave Brubeck Quartet - Take Five.mp3",
+      "output_filename": "226 - The Dave Brubeck Quartet - Take Five.flac",
       "position": 226,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 273,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 176400,
       "source_path": "I:\\Music\\HiFiTest\\Time Out 176-24bit HDTracks\\03-Take Five.flac",
@@ -10463,21 +10463,21 @@
       "codec": "FLAC",
       "date": "2007",
       "duration_sec": 206.16,
-      "filename_hint": "236 - John Lee Hooker - One Bourbon, One Scotch, One Beer.mp3",
+      "filename_hint": "236 - John Lee Hooker - One Bourbon, One Scotch, One Beer.flac",
       "genre": "Blues",
-      "output_filename": "236 - John Lee Hooker - One Bourbon, One Scotch, One Beer.mp3",
+      "output_filename": "236 - John Lee Hooker - One Bourbon, One Scotch, One Beer.flac",
       "position": 236,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 283,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "D:\\Music\\000_Избранное наборы\\Source\\2025_11\\John Lee Hooker-Chill Out (Remastered)(2007)[FLAC]\\05One Bourbon, One Scotch, One Beer.flac",
@@ -10551,21 +10551,21 @@
       "codec": "FLAC",
       "date": "2021-05-14",
       "duration_sec": 228.054,
-      "filename_hint": "238 - The Black Keys - Coal Black Mattie.mp3",
+      "filename_hint": "238 - The Black Keys - Coal Black Mattie.flac",
       "genre": "Blues",
-      "output_filename": "238 - The Black Keys - Coal Black Mattie.mp3",
+      "output_filename": "238 - The Black Keys - Coal Black Mattie.flac",
       "position": 238,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 285,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 48000,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys - 2021 - Delta Kream (24bit-48kHz)\\06 Coal Black Mattie.flac",
@@ -11613,21 +11613,21 @@
       "codec": "FLAC",
       "date": "2001",
       "duration_sec": 274.507,
-      "filename_hint": "262 - ABBA - Lay All Your Love On Me.mp3",
+      "filename_hint": "262 - ABBA - Lay All Your Love On Me.flac",
       "genre": "Pop",
-      "output_filename": "262 - ABBA - Lay All Your Love On Me.mp3",
+      "output_filename": "262 - ABBA - Lay All Your Love On Me.flac",
       "position": 262,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 309,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Pop\\ABBA 2001 - The Definitive Collection\\CD2\\08 - Lay All Your Love On Me.flac",
@@ -11833,21 +11833,21 @@
       "codec": "FLAC",
       "date": "2016",
       "duration_sec": 299.294,
-      "filename_hint": "267 - Sofi Tukker - Drinkee.mp3",
+      "filename_hint": "267 - Sofi Tukker - Drinkee.flac",
       "genre": "Club House/Dance Pop/Funky House",
-      "output_filename": "267 - Sofi Tukker - Drinkee.mp3",
+      "output_filename": "267 - Sofi Tukker - Drinkee.flac",
       "position": 267,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 314,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\House\\Sofi Tukker\\2016-07-08. Soft Animals\\01 Drinkee.flac",
@@ -12009,21 +12009,21 @@
       "codec": "FLAC",
       "date": "1973",
       "duration_sec": 425.88,
-      "filename_hint": "271 - Pink Floyd - Time.mp3",
+      "filename_hint": "271 - Pink Floyd - Time.flac",
       "genre": "Rock",
-      "output_filename": "271 - Pink Floyd - Time.mp3",
+      "output_filename": "271 - Pink Floyd - Time.flac",
       "position": 271,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 318,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 192000,
       "source_path": "E:\\YandexDisk\\Music\\_hiRes\\Rock\\Pink Floyd - 1973 - The Dark Side Of The Moon (50th Anniversary, 2023 Remaster) (24bit-192kHz)\\04 Time.flac",
@@ -12317,21 +12317,21 @@
       "codec": "FLAC",
       "date": "2001",
       "duration_sec": 185.8,
-      "filename_hint": "278 - ABBA - Money, Money, Money.mp3",
+      "filename_hint": "278 - ABBA - Money, Money, Money.flac",
       "genre": "Pop",
-      "output_filename": "278 - ABBA - Money, Money, Money.mp3",
+      "output_filename": "278 - ABBA - Money, Money, Money.flac",
       "position": 278,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 325,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Pop\\ABBA 2001 - The Definitive Collection\\CD1\\13 - Money, Money, Money.flac",
@@ -12581,21 +12581,21 @@
       "codec": "FLAC",
       "date": "2001",
       "duration_sec": 199.413,
-      "filename_hint": "284 - ВИА Пламя - На дальней станции сойду.mp3",
+      "filename_hint": "284 - ВИА Пламя - На дальней станции сойду.flac",
       "genre": "Pop",
-      "output_filename": "284 - ВИА Пламя - На дальней станции сойду.mp3",
+      "output_filename": "284 - ВИА Пламя - На дальней станции сойду.flac",
       "position": 284,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 331,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\ВИА Пламя - Grand Collection(2001)\\02 - На дальней станции сойду.flac",
@@ -13221,21 +13221,21 @@
       "codec": "FLAC",
       "date": "1997",
       "duration_sec": 207.227,
-      "filename_hint": "298 - НИНА БРОДСКАЯ - Кто тебе сказал.mp3",
+      "filename_hint": "298 - НИНА БРОДСКАЯ - Кто тебе сказал.flac",
       "genre": "Pop",
-      "output_filename": "298 - НИНА БРОДСКАЯ - Кто тебе сказал.mp3",
+      "output_filename": "298 - НИНА БРОДСКАЯ - Кто тебе сказал.flac",
       "position": 298,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 345,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\Various Artists - Золотой шлягер 70-х Russian Collection 1973-1979 Volume 4\\15. НИНА БРОДСКАЯ - Кто тебе сказал.flac",
@@ -13705,21 +13705,21 @@
       "codec": "FLAC",
       "date": "2001",
       "duration_sec": 196.653,
-      "filename_hint": "309 - ВИА Пламя - Дорога железная.mp3",
+      "filename_hint": "309 - ВИА Пламя - Дорога железная.flac",
       "genre": "Pop",
-      "output_filename": "309 - ВИА Пламя - Дорога железная.mp3",
+      "output_filename": "309 - ВИА Пламя - Дорога железная.flac",
       "position": 309,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 356,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\ВИА Пламя - Grand Collection(2001)\\14 - Дорога железная.flac",
@@ -13749,21 +13749,21 @@
       "codec": "FLAC",
       "date": "2001",
       "duration_sec": 143.973,
-      "filename_hint": "310 - ВИА Пламя - Строим БАМ.mp3",
+      "filename_hint": "310 - ВИА Пламя - Строим БАМ.flac",
       "genre": "Pop",
-      "output_filename": "310 - ВИА Пламя - Строим БАМ.mp3",
+      "output_filename": "310 - ВИА Пламя - Строим БАМ.flac",
       "position": 310,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 357,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\ВИА Пламя - Grand Collection(2001)\\11 - Строим БАМ.flac",
@@ -13975,21 +13975,21 @@
       "codec": "FLAC",
       "date": "1998",
       "duration_sec": 4102.8,
-      "filename_hint": "315 - Elton John - The One.mp3",
+      "filename_hint": "315 - Elton John - The One.flac",
       "genre": "Pop",
-      "output_filename": "315 - Elton John - The One.mp3",
+      "output_filename": "315 - Elton John - The One.flac",
       "position": 315,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 362,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\Попса\\Elton John - 1992 - The One\\CDImage.flac.flac",
@@ -14283,21 +14283,21 @@
       "codec": "FLAC",
       "date": "2021-05-14",
       "duration_sec": 248.512,
-      "filename_hint": "322 - The Black Keys - Poor Boy a Long Way From Home.mp3",
+      "filename_hint": "322 - The Black Keys - Poor Boy a Long Way From Home.flac",
       "genre": "Blues",
-      "output_filename": "322 - The Black Keys - Poor Boy a Long Way From Home.mp3",
+      "output_filename": "322 - The Black Keys - Poor Boy a Long Way From Home.flac",
       "position": 322,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 369,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 48000,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys - 2021 - Delta Kream (24bit-48kHz)\\03 Poor Boy a Long Way From Home.flac",
@@ -14949,21 +14949,21 @@
       "codec": null,
       "date": null,
       "duration_sec": null,
-      "filename_hint": "337 - Unknown Artist - Там вдали за рекой - DASH.mp3",
+      "filename_hint": "337 - Unknown Artist - Там вдали за рекой - DASH.opus",
       "genre": null,
-      "output_filename": "337 - Unknown Artist - Там вдали за рекой - DASH.mp3",
+      "output_filename": "337 - Unknown Artist - Там вдали за рекой - DASH.opus",
       "position": 337,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 384,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".opus"
       },
       "sample_rate_hz": null,
       "source_path": "D:\\Music\\000_Избранное наборы\\PlayList\\DvorYoutube\\Там вдали за рекой - DASH.opus",
@@ -15495,21 +15495,21 @@
       "codec": "FLAC",
       "date": "2014",
       "duration_sec": 211.023,
-      "filename_hint": "349 - Steppenwolf - Born To Be Wild.mp3",
+      "filename_hint": "349 - Steppenwolf - Born To Be Wild.flac",
       "genre": "Rock",
-      "output_filename": "349 - Steppenwolf - Born To Be Wild.mp3",
+      "output_filename": "349 - Steppenwolf - Born To Be Wild.flac",
       "position": 349,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 396,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 192000,
       "source_path": "I:\\Music\\Steppenwolf - Steppenwolf 1968 (2014) [192-24]\\05-Born To Be Wild.flac",
@@ -16375,21 +16375,21 @@
       "codec": "FLAC",
       "date": "2019",
       "duration_sec": 232.96,
-      "filename_hint": "369 - Michael Kiwanuka - Solid Ground.mp3",
+      "filename_hint": "369 - Michael Kiwanuka - Solid Ground.flac",
       "genre": "Soul",
-      "output_filename": "369 - Michael Kiwanuka - Solid Ground.mp3",
+      "output_filename": "369 - Michael Kiwanuka - Solid Ground.flac",
       "position": 369,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 416,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 96000,
       "source_path": "I:\\Music\\Michael Kiwanuka - KIWANUKA (2019) [24-96]\\13. Solid Ground.flac",
@@ -16419,21 +16419,21 @@
       "codec": "FLAC",
       "date": "2011",
       "duration_sec": 276.187,
-      "filename_hint": "370 - U2 - One.mp3",
+      "filename_hint": "370 - U2 - One.flac",
       "genre": "Rock",
-      "output_filename": "370 - U2 - One.mp3",
+      "output_filename": "370 - U2 - One.flac",
       "position": 370,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 417,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\00_new_old\\U2 - 2011 - Achtung Baby (Super Deluxe Edition)\\CD 1 - Achtung Baby\\03 - U2 - 2011 - One.flac",
@@ -17481,21 +17481,21 @@
       "codec": "FLAC",
       "date": "2006",
       "duration_sec": 218.76,
-      "filename_hint": "394 - Moby - Why Does My Heart Feel So Bad_ Ferry Corsten Remix.mp3",
+      "filename_hint": "394 - Moby - Why Does My Heart Feel So Bad_ Ferry Corsten Remix.flac",
       "genre": "Electronic",
-      "output_filename": "394 - Moby - Why Does My Heart Feel So Bad_ Ferry Corsten Remix.mp3",
+      "output_filename": "394 - Moby - Why Does My Heart Feel So Bad_ Ferry Corsten Remix.flac",
       "position": 394,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 441,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\electro\\MOBY\\2007 - Go-The Very Best Of Moby - Remixed [XCD MUTEL 14, 0094638859925]\\18-Why Does My Heart Feel So Bad  Ferry Corsten Remix.flac",
@@ -17965,21 +17965,21 @@
       "codec": "FLAC",
       "date": "1973",
       "duration_sec": 382.2,
-      "filename_hint": "405 - Pink Floyd - Money.mp3",
+      "filename_hint": "405 - Pink Floyd - Money.flac",
       "genre": "Rock",
-      "output_filename": "405 - Pink Floyd - Money.mp3",
+      "output_filename": "405 - Pink Floyd - Money.flac",
       "position": 405,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 452,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 192000,
       "source_path": "E:\\YandexDisk\\Music\\_hiRes\\Rock\\Pink Floyd - 1973 - The Dark Side Of The Moon (50th Anniversary, 2023 Remaster) (24bit-192kHz)\\06 Money.flac",
@@ -18361,21 +18361,21 @@
       "codec": "FLAC",
       "date": "1969/2021",
       "duration_sec": 277.52,
-      "filename_hint": "414 - Frank Sinatra - My Way.mp3",
+      "filename_hint": "414 - Frank Sinatra - My Way.flac",
       "genre": "Vocal-Jazz, Jazz",
-      "output_filename": "414 - Frank Sinatra - My Way.mp3",
+      "output_filename": "414 - Frank Sinatra - My Way.flac",
       "position": 414,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 461,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 176400,
       "source_path": "E:\\YandexDisk\\Music\\_hiRes\\Jazz\\Frank Sinatra - My Way - 50th Anniversary Edition SACD (2021) - FLAC\\06 - Frank Sinatra - My Way.flac",
@@ -19139,21 +19139,21 @@
       "codec": "FLAC",
       "date": "2019",
       "duration_sec": 146.573,
-      "filename_hint": "431 - The Black Keys - Go.mp3",
+      "filename_hint": "431 - The Black Keys - Go.flac",
       "genre": "Blues Rock",
-      "output_filename": "431 - The Black Keys - Go.mp3",
+      "output_filename": "431 - The Black Keys - Go.flac",
       "position": 431,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 478,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys\\2019 - Let's Rock\\09 - Go.flac",
@@ -19403,21 +19403,21 @@
       "codec": "FLAC",
       "date": "2016",
       "duration_sec": 233.413,
-      "filename_hint": "437 - Michael Kiwanuka - One More Night.mp3",
+      "filename_hint": "437 - Michael Kiwanuka - One More Night.flac",
       "genre": "Soul / Funk / R&B",
-      "output_filename": "437 - Michael Kiwanuka - One More Night.mp3",
+      "output_filename": "437 - Michael Kiwanuka - One More Night.flac",
       "position": 437,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 484,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 96000,
       "source_path": "I:\\Music\\Michael Kiwanuka - Love & Hate (2016) [FLAC 24]\\06 - One More Night.flac",
@@ -19447,21 +19447,21 @@
       "codec": "FLAC",
       "date": "2021",
       "duration_sec": 251.32,
-      "filename_hint": "438 - The Black Keys - Little Black Submarines.mp3",
+      "filename_hint": "438 - The Black Keys - Little Black Submarines.flac",
       "genre": "Alt. Rock",
-      "output_filename": "438 - The Black Keys - Little Black Submarines.mp3",
+      "output_filename": "438 - The Black Keys - Little Black Submarines.flac",
       "position": 438,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 485,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys\\2021 - El Camino (10th Anniversary Edition)\\CD 1\\04 Little Black Submarines.flac",
@@ -19535,21 +19535,21 @@
       "codec": "FLAC",
       "date": "2021",
       "duration_sec": 205.347,
-      "filename_hint": "440 - The Black Keys - Sister.mp3",
+      "filename_hint": "440 - The Black Keys - Sister.flac",
       "genre": "Alt. Rock",
-      "output_filename": "440 - The Black Keys - Sister.mp3",
+      "output_filename": "440 - The Black Keys - Sister.flac",
       "position": 440,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 487,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys\\2021 - El Camino (10th Anniversary Edition)\\CD 1\\07 Sister.flac",
@@ -19975,21 +19975,21 @@
       "codec": "FLAC",
       "date": "2021",
       "duration_sec": 193.667,
-      "filename_hint": "450 - The Black Keys - Lonely Boy.mp3",
+      "filename_hint": "450 - The Black Keys - Lonely Boy.flac",
       "genre": "Alt. Rock",
-      "output_filename": "450 - The Black Keys - Lonely Boy.mp3",
+      "output_filename": "450 - The Black Keys - Lonely Boy.flac",
       "position": 450,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 497,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys\\2021 - El Camino (10th Anniversary Edition)\\CD 1\\01 Lonely Boy.flac",
@@ -20239,21 +20239,21 @@
       "codec": "FLAC",
       "date": "2022",
       "duration_sec": 164.867,
-      "filename_hint": "456 - The Black Keys - Wild Child.mp3",
+      "filename_hint": "456 - The Black Keys - Wild Child.flac",
       "genre": "Rock",
-      "output_filename": "456 - The Black Keys - Wild Child.mp3",
+      "output_filename": "456 - The Black Keys - Wild Child.flac",
       "position": 456,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 503,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys\\2022 - Dropout Boogie\\01 - Wild Child.flac",
@@ -20283,21 +20283,21 @@
       "codec": "FLAC",
       "date": "2006",
       "duration_sec": 217.987,
-      "filename_hint": "457 - Moby - In This World Push Vocal Club Mix.mp3",
+      "filename_hint": "457 - Moby - In This World Push Vocal Club Mix.flac",
       "genre": "Electronic",
-      "output_filename": "457 - Moby - In This World Push Vocal Club Mix.mp3",
+      "output_filename": "457 - Moby - In This World Push Vocal Club Mix.flac",
       "position": 457,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 504,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\electro\\MOBY\\2007 - Go-The Very Best Of Moby - Remixed [XCD MUTEL 14, 0094638859925]\\10-In This World Push Vocal Club Mix.flac",
@@ -20327,21 +20327,21 @@
       "codec": "FLAC",
       "date": "2021-01-01",
       "duration_sec": 191.956,
-      "filename_hint": "458 - The Black Keys - Howlin' for You.mp3",
+      "filename_hint": "458 - The Black Keys - Howlin' for You.flac",
       "genre": "Alternative",
-      "output_filename": "458 - The Black Keys - Howlin' for You.mp3",
+      "output_filename": "458 - The Black Keys - Howlin' for You.flac",
       "position": 458,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 505,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 48000,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys - 2010 - Brothers (Deluxe Remastered Anniversary Edition) (24bit-48kHz)\\04 Howlin' for You.flac",
@@ -20415,21 +20415,21 @@
       "codec": "FLAC",
       "date": "2006",
       "duration_sec": 236.92,
-      "filename_hint": "460 - Moby - Honey Rollo And Sister Bliss Remix.mp3",
+      "filename_hint": "460 - Moby - Honey Rollo And Sister Bliss Remix.flac",
       "genre": "Electronic",
-      "output_filename": "460 - Moby - Honey Rollo And Sister Bliss Remix.mp3",
+      "output_filename": "460 - Moby - Honey Rollo And Sister Bliss Remix.flac",
       "position": 460,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 507,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\electro\\MOBY\\2007 - Go-The Very Best Of Moby - Remixed [XCD MUTEL 14, 0094638859925]\\11-Honey Rollo And Sister Bliss Remix.flac",
@@ -21037,21 +21037,21 @@
       "codec": "FLAC",
       "date": "2008",
       "duration_sec": 242.947,
-      "filename_hint": "474 - M.I.A. - Paper Planes feat. Rye Rye & Afrikan Boy (Blaqstarr Remix).mp3",
+      "filename_hint": "474 - M.I.A. - Paper Planes feat. Rye Rye & Afrikan Boy (Blaqstarr Remix).flac",
       "genre": "Electronic",
-      "output_filename": "474 - M.I.A. - Paper Planes feat. Rye Rye & Afrikan Boy (Blaqstarr Remix).mp3",
+      "output_filename": "474 - M.I.A. - Paper Planes feat. Rye Rye & Afrikan Boy (Blaqstarr Remix).flac",
       "position": 474,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 521,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\000_Избранное наборы\\Source\\Older\\M.I.A. - Paper Planes (Homeland Security Remixes)(2008)[FLAC]\\01. Paper Planes (ft. Rye Rye and Afrikan Boy)(Blaqstarr Remix).flac",
@@ -21125,21 +21125,21 @@
       "codec": "FLAC",
       "date": "2010",
       "duration_sec": 157.027,
-      "filename_hint": "476 - Yolanda Be Cool & DCUP - We No Speak Americano (Dutch Radio Version).mp3",
+      "filename_hint": "476 - Yolanda Be Cool & DCUP - We No Speak Americano (Dutch Radio Version).flac",
       "genre": "Electronic",
-      "output_filename": "476 - Yolanda Be Cool & DCUP - We No Speak Americano (Dutch Radio Version).mp3",
+      "output_filename": "476 - Yolanda Be Cool & DCUP - We No Speak Americano (Dutch Radio Version).flac",
       "position": 476,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 523,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "I:\\Music\\01_NEW\\Yolanda Be Cool & DCUP - 2010 - We No Speak Americano ! [FLAC]\\01 - We No Speak Americano (Dutch Radio Version) .flac",
@@ -21439,21 +21439,21 @@
       "codec": "FLAC",
       "date": "2006",
       "duration_sec": 249.84,
-      "filename_hint": "483 - Moby - Porcelain Murk Remix.mp3",
+      "filename_hint": "483 - Moby - Porcelain Murk Remix.flac",
       "genre": "Electronic",
-      "output_filename": "483 - Moby - Porcelain Murk Remix.mp3",
+      "output_filename": "483 - Moby - Porcelain Murk Remix.flac",
       "position": 483,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 530,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\electro\\MOBY\\2007 - Go-The Very Best Of Moby - Remixed [XCD MUTEL 14, 0094638859925]\\08-Porcelain Murk Remix.flac",
@@ -22287,21 +22287,21 @@
       "codec": "FLAC",
       "date": "1969/2021",
       "duration_sec": 212.36,
-      "filename_hint": "502 - Frank Sinatra - If You Go Away.mp3",
+      "filename_hint": "502 - Frank Sinatra - If You Go Away.flac",
       "genre": "Vocal-Jazz, Jazz",
-      "output_filename": "502 - Frank Sinatra - If You Go Away.mp3",
+      "output_filename": "502 - Frank Sinatra - If You Go Away.flac",
       "position": 502,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 549,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 176400,
       "source_path": "E:\\YandexDisk\\Music\\_hiRes\\Jazz\\Frank Sinatra - My Way - 50th Anniversary Edition SACD (2021) - FLAC\\09 - Frank Sinatra - If You Go Away.flac",
@@ -22419,21 +22419,21 @@
       "codec": "FLAC",
       "date": "2004",
       "duration_sec": 2365.107,
-      "filename_hint": "505 - Nick Cave and the Bad Seeds - Breathless.mp3",
+      "filename_hint": "505 - Nick Cave and the Bad Seeds - Breathless.flac",
       "genre": "Alternative",
-      "output_filename": "505 - Nick Cave and the Bad Seeds - Breathless.mp3",
+      "output_filename": "505 - Nick Cave and the Bad Seeds - Breathless.flac",
       "position": 505,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 552,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "D:\\Music\\Роковщина\\Nick Cave\\[2004] The Lyre of Orpheus\\Nick Cave and the Bad Seeds - The Lyre of Orpheus.flac",
@@ -22859,21 +22859,21 @@
       "codec": "AAC",
       "date": "2013",
       "duration_sec": 207.308,
-      "filename_hint": "515 - Hugh Laurie - Kiss of Fire.mp3",
+      "filename_hint": "515 - Hugh Laurie - Kiss of Fire.m4a",
       "genre": "Blues",
-      "output_filename": "515 - Hugh Laurie - Kiss of Fire.mp3",
+      "output_filename": "515 - Hugh Laurie - Kiss of Fire.m4a",
       "position": 515,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for iTunes/MP4.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 562,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".m4a"
       },
       "sample_rate_hz": 44100,
       "source_path": "D:\\000_USERS\\BSV\\Music\\iTunes\\iTunes Media\\Music\\Hugh Laurie\\Didn't It Rain\\03 Kiss of Fire 1.m4a",
@@ -23167,21 +23167,21 @@
       "codec": "FLAC",
       "date": "2021-05-14",
       "duration_sec": 228.973,
-      "filename_hint": "522 - The Black Keys - Going Down South.mp3",
+      "filename_hint": "522 - The Black Keys - Going Down South.flac",
       "genre": "Blues",
-      "output_filename": "522 - The Black Keys - Going Down South.mp3",
+      "output_filename": "522 - The Black Keys - Going Down South.flac",
       "position": 522,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 569,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 48000,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys - 2021 - Delta Kream (24bit-48kHz)\\05 Going Down South.flac",
@@ -23255,21 +23255,21 @@
       "codec": "FLAC",
       "date": "2021-05-14",
       "duration_sec": 368.703,
-      "filename_hint": "524 - The Black Keys - Crawling Kingsnake.mp3",
+      "filename_hint": "524 - The Black Keys - Crawling Kingsnake.flac",
       "genre": "Blues",
-      "output_filename": "524 - The Black Keys - Crawling Kingsnake.mp3",
+      "output_filename": "524 - The Black Keys - Crawling Kingsnake.flac",
       "position": 524,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 571,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 48000,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys - 2021 - Delta Kream (24bit-48kHz)\\01 Crawling Kingsnake.flac",
@@ -23651,21 +23651,21 @@
       "codec": "FLAC",
       "date": "2019",
       "duration_sec": 199.133,
-      "filename_hint": "533 - Michael Kiwanuka - Hero.mp3",
+      "filename_hint": "533 - Michael Kiwanuka - Hero.flac",
       "genre": "Soul",
-      "output_filename": "533 - Michael Kiwanuka - Hero.mp3",
+      "output_filename": "533 - Michael Kiwanuka - Hero.flac",
       "position": 533,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 580,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 96000,
       "source_path": "I:\\Music\\Michael Kiwanuka - KIWANUKA (2019) [24-96]\\09. Hero.flac",
@@ -24373,21 +24373,21 @@
       "codec": "FLAC",
       "date": "2021",
       "duration_sec": 224.493,
-      "filename_hint": "549 - The Black Keys - Gold On The Ceiling.mp3",
+      "filename_hint": "549 - The Black Keys - Gold On The Ceiling.flac",
       "genre": "Alt. Rock",
-      "output_filename": "549 - The Black Keys - Gold On The Ceiling.mp3",
+      "output_filename": "549 - The Black Keys - Gold On The Ceiling.flac",
       "position": 549,
       "producer_meta": {
-        "audio_action": "convert",
+        "audio_action": "copy",
         "processing_notes": [
-          "Readiness: Physical Playlist Builder would need MP3 output audio.",
-          "Prepared normalized tag values for ID3v2.4.",
+          "Readiness: source audio is eligible for direct-copy handling by Physical Playlist Builder.",
+          "Prepared normalized tag values for VorbisComment.",
           "Playlist job would require integrated loudness measurement."
         ],
         "readiness_status": "ready",
         "source_item_id": 596,
         "tag_mode": "normalize",
-        "target_ext": ".mp3"
+        "target_ext": ".flac"
       },
       "sample_rate_hz": 44100,
       "source_path": "E:\\YandexDisk\\Music\\Rock\\The Black Keys\\The Black Keys\\2021 - El Camino (10th Anniversary Edition)\\CD 1\\03 Gold On The Ceiling.flac",

@@ -1,1 +1,1 @@
-python -m ppb.cli --input run.json --out D:\Music\000_Избранное наборы\PlayList\ --audio-bitrate 320k
+python -m ppb.cli --input run.json --out "D:\Music\EXPORT_PlayList" --audio-bitrate 320k --skip-loudness-verification --id3-version v23

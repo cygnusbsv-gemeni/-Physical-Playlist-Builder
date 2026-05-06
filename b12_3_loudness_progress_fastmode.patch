@@ -1,0 +1,388 @@
+--- a/ppb/cli.py
++++ b/ppb/cli.py
+@@ -177,6 +177,15 @@
+         ),
+     )
+     parser.add_argument(
++        "--skip-loudness-verification",
++        action="store_true",
++        default=False,
++        help=(
++            "Skip post-normalization loudness verification during real export. "
++            "Measurement and normalization still run when loudness processing is enabled."
++        ),
++    )
++    parser.add_argument(
+         "--skip-tags",
+         action="store_true",
+         default=False,
+@@ -386,7 +395,60 @@
+ 
+ def print_copy_progress(index: int, total: int, result: CopyTrackResult) -> None:
+     filename = result.expected_output_filename or Path(result.source_path).name or "(no filename)"
+-    print(f"[export] {index}/{total} {result.status}: {filename}")
++    print(f"[export] {index}/{total} {result.status}: {filename}", flush=True)
++
++
++def _progress_filename(track_result) -> str:
++    return (
++        track_result.expected_output_filename
++        or Path(track_result.destination_path or track_result.source_path).name
++        or "(no filename)"
++    )
++
++
++def print_loudness_stage_start(
++    *,
++    should_process: bool,
++    eligible_count: int,
++    target_lufs: float | None,
++    true_peak_db: float | None,
++    skip_verification: bool,
++    reason: str | None,
++) -> None:
++    if should_process:
++        verification_note = "verification=skipped" if skip_verification else "verification=enabled"
++        print(
++            "[loudness] Starting: "
++            f"eligible={eligible_count}, target={target_lufs} LUFS, "
++            f"true_peak={true_peak_db} dBTP, {verification_note}",
++            flush=True,
++        )
++        return
++    print(f"[loudness] Skipped: {reason or 'no eligible tracks.'}", flush=True)
++
++
++def print_loudness_step(index: int, total: int, step: str, track_result) -> None:
++    print(
++        f"[loudness] {index}/{total} {step}: {_progress_filename(track_result)}",
++        flush=True,
++    )
++
++
++def print_loudness_done(index: int, total: int, track_result, loudness_result: dict[str, Any]) -> None:
++    print(
++        "[loudness] "
++        f"{index}/{total} done: {_progress_filename(track_result)} | "
++        f"measure={loudness_result.get('loudness_status')} "
++        f"normalize={loudness_result.get('loudness_normalization_status')} "
++        f"verify={loudness_result.get('post_loudness_status')} "
++        f"input_i={loudness_result.get('input_i')} "
++        f"post_i={loudness_result.get('post_input_i')}",
++        flush=True,
++    )
++
++
++def print_tag_step(index: int, total: int, step: str, track_result) -> None:
++    print(f"[tags] {index}/{total} {step}: {_progress_filename(track_result)}", flush=True)
+ 
+ 
+ def print_copy_summary(copy_result) -> None:
+@@ -666,7 +728,12 @@
+         id3_version,
+         reason or "(none)",
+     )
++    if should_write:
++        print(f"[tags] Starting: eligible={eligible_count}, id3_version={id3_version}", flush=True)
++    else:
++        print(f"[tags] Skipped: {reason or 'tag writing not enabled.'}", flush=True)
+ 
++    eligible_index = 0
+     for index, track_result in enumerate(copy_result.results):
+         track = job.tracks[index] if index < len(job.tracks) else None
+         if track_result.status == STATUS_RESUMED:
+@@ -697,6 +764,8 @@
+             _log_tag_track_result(logger, track_result, tag_result)
+             continue
+ 
++        eligible_index += 1
++        print_tag_step(eligible_index, eligible_count, "writing", track_result)
+         metadata = _track_tag_metadata(track)
+         helper_result = write_tags_to_exported_file(
+             file_path=Path(track_result.destination_path).resolve(strict=False),
+@@ -707,6 +776,7 @@
+         tag_result = _tag_helper_result_to_report(helper_result)
+         results.append(tag_result)
+         _log_tag_track_result(logger, track_result, tag_result)
++        print_tag_step(eligible_index, eligible_count, str(tag_result.get("tag_status") or "done"), track_result)
+ 
+     totals = _count_tag_results(results)
+     summary = {
+@@ -739,6 +809,7 @@
+     final_output_dir: Path | str,
+     settings,
+     skip_loudness: bool,
++    skip_loudness_verification: bool,
+     ffmpeg_path: Path | str | None,
+     mp3_quality: int,
+     audio_bitrate: str | None,
+@@ -779,7 +850,21 @@
+         loudness_range_lufs,
+         reason or "(none)",
+     )
++    logger.info(
++        "loudness verification mode: enabled=%s skip_loudness_verification=%s",
++        should_process and not skip_loudness_verification,
++        skip_loudness_verification,
++    )
++    print_loudness_stage_start(
++        should_process=should_process,
++        eligible_count=eligible_count,
++        target_lufs=target_lufs,
++        true_peak_db=true_peak_db,
++        skip_verification=skip_loudness_verification,
++        reason=reason,
++    )
+ 
++    eligible_index = 0
+     for track_result in copy_result.results:
+         if track_result.status == STATUS_RESUMED:
+             skip_result = _loudness_skipped_result(
+@@ -856,10 +941,12 @@
+             )
+             continue
+ 
++        eligible_index += 1
+         destination_path = str(Path(track_result.destination_path).resolve(strict=False))
+         size_after_export_before_loudness = (
+             Path(destination_path).stat().st_size if Path(destination_path).is_file() else None
+         )
++        print_loudness_step(eligible_index, eligible_count, "measuring", track_result)
+         measurement = measure_loudness_first_pass(
+             source_path=destination_path,
+             ffmpeg=ffmpeg_path,
+@@ -873,6 +960,7 @@
+             size_after_export_before_loudness=size_after_export_before_loudness,
+         )
+         if measurement.success:
++            print_loudness_step(eligible_index, eligible_count, "normalizing", track_result)
+             normalization = normalize_loudness_second_pass(
+                 exported_path=destination_path,
+                 output_folder=output_dir,
+@@ -893,22 +981,35 @@
+                 final_path = Path(normalization.output_path).resolve(strict=False)
+                 track_result.destination_path = str(final_path)
+                 track_result.destination_size = final_path.stat().st_size if final_path.is_file() else None
+-                loudness_result.update(
+-                    _post_loudness_verification_to_report(
+-                        measure_loudness_first_pass(
+-                            source_path=str(final_path),
+-                            ffmpeg=(
+-                                getattr(normalization, "ffmpeg", None)
+-                                or measurement.ffmpeg
+-                                or ffmpeg_path
++                if skip_loudness_verification:
++                    loudness_result.update(
++                        _post_loudness_skipped_result(
++                            "--skip-loudness-verification was passed.",
++                            measured_path=str(final_path),
++                        )
++                    )
++                    logger.info(
++                        "track %s post-normalization loudness verification skipped by CLI option",
++                        track_result.position,
++                    )
++                else:
++                    print_loudness_step(eligible_index, eligible_count, "verifying", track_result)
++                    loudness_result.update(
++                        _post_loudness_verification_to_report(
++                            measure_loudness_first_pass(
++                                source_path=str(final_path),
++                                ffmpeg=(
++                                    getattr(normalization, "ffmpeg", None)
++                                    or measurement.ffmpeg
++                                    or ffmpeg_path
++                                ),
++                                target_lufs=target_lufs,
++                                true_peak_db=true_peak_db,
++                                loudness_range_lufs=loudness_range_lufs,
+                             ),
+-                            target_lufs=target_lufs,
+-                            true_peak_db=true_peak_db,
+-                            loudness_range_lufs=loudness_range_lufs,
+-                        ),
+-                        measured_path=str(final_path),
++                            measured_path=str(final_path),
++                        )
+                     )
+-                )
+                 loudness_result["size_after_loudness"] = track_result.destination_size
+                 loudness_result["final_size"] = track_result.destination_size
+             else:
+@@ -928,6 +1029,7 @@
+         _log_loudness_track_result(logger, track_result, loudness_result)
+         _log_loudness_normalization_track_result(logger, track_result, loudness_result)
+         _log_post_loudness_track_result(logger, track_result, loudness_result)
++        print_loudness_done(eligible_index, eligible_count, track_result, loudness_result)
+ 
+     totals = _count_loudness_results(results)
+     measurement_totals = _count_loudness_measurement_results(results)
+@@ -942,6 +1044,8 @@
+         "reason": reason,
+         "normalize_loudness": normalize_loudness,
+         "skip_loudness": skip_loudness,
++        "skip_loudness_verification": skip_loudness_verification,
++        "verification_enabled": should_process and not skip_loudness_verification,
+         "target_lufs": target_lufs,
+         "true_peak_db": true_peak_db,
+         "loudness_range_lufs": loudness_range_lufs,
+@@ -1163,7 +1267,11 @@
+     }
+ 
+ 
+-def _post_loudness_skipped_result(reason: str) -> dict[str, Any]:
++def _post_loudness_skipped_result(
++    reason: str,
++    *,
++    measured_path: str | None = None,
++) -> dict[str, Any]:
+     return {
+         "post_loudness_status": LOUDNESS_STATUS_SKIPPED,
+         "post_input_i": None,
+@@ -1174,7 +1282,7 @@
+         "post_loudness_error": None,
+         "post_loudness_stderr_summary": "",
+         "post_loudness_skip_reason": reason,
+-        "post_loudness_measured_path": None,
++        "post_loudness_measured_path": measured_path,
+         "post_loudness_return_code": None,
+     }
+ 
+@@ -1772,6 +1880,7 @@
+             final_output_dir=output_result.final_output_dir,
+             settings=result.job.settings,
+             skip_loudness=args.skip_loudness,
++            skip_loudness_verification=args.skip_loudness_verification,
+             ffmpeg_path=args.ffmpeg,
+             mp3_quality=args.mp3_quality,
+             audio_bitrate=args.audio_bitrate,
+@@ -1787,6 +1896,7 @@
+         )
+         report_path = Path(output_result.final_output_dir) / EXPORT_REPORT_FILENAME
+         report_txt_path = Path(output_result.final_output_dir) / EXPORT_REPORT_TEXT_FILENAME
++        print("[m3u8] Generating playlist...", flush=True)
+         m3u_result = generate_m3u8_playlist(
+             job=result.job,
+             copy_result=copy_result,
+@@ -1806,6 +1916,7 @@
+         log_m3u_details(logger, m3u_result)
+         try:
+             run_finished_at = datetime.now(timezone.utc).isoformat()
++            print("[report] Writing export reports...", flush=True)
+             write_export_report(
+                 copy_result,
+                 report_path,
+--- a/ppb/report.py
++++ b/ppb/report.py
+@@ -419,6 +419,7 @@
+         f"Failed: {loudness_totals.get(LOUDNESS_STATUS_FAILED, 0)}",
+         f"FFmpeg missing: {loudness_totals.get(LOUDNESS_STATUS_FFMPEG_MISSING, 0)}",
+         f"Post-normalization verified: {verification_totals.get('verified', 0)}",
++        f"Post-normalization verification skipped: {verification_totals.get(LOUDNESS_STATUS_SKIPPED, 0)}",
+         f"Post-normalization verification failed: {verification_totals.get('verification_failed', 0)}",
+         "",
+         "Tag Writing",
+--- a/tests/test_loudness_processing.py
++++ b/tests/test_loudness_processing.py
+@@ -229,6 +229,101 @@
+     assert source.resolve(strict=False) not in observed_normalization_paths
+ 
+ 
++def test_cli_skip_loudness_verification_avoids_post_measurement_and_reports_progress(
++    tmp_path,
++    monkeypatch,
++    capsys,
++):
++    source = tmp_path / "sources" / "tone.wav"
++    write_sine_wav(source)
++    source_hash_before = sha256(source)
++    output_dir = tmp_path / "export"
++    destination = output_dir / "tone.wav"
++    observed_measurement_paths: list[Path] = []
++    observed_normalization_paths: list[Path] = []
++    job = write_job(
++        tmp_path,
++        [
++            {
++                "position": 1,
++                "source_path": str(source),
++                "output_filename": destination.name,
++                "artist": "Artist",
++                "title": "Tone",
++            }
++        ],
++    )
++
++    def fake_measure_loudness_first_pass(**kwargs):
++        measured = Path(kwargs["source_path"]).resolve(strict=False)
++        observed_measurement_paths.append(measured)
++        return SimpleNamespace(
++            success=True,
++            status="measured",
++            input_i=-20.0,
++            input_tp=-2.0,
++            input_lra=3.0,
++            input_thresh=-30.0,
++            target_offset=0.5,
++            return_code=0,
++            stderr_summary="",
++            errors=[],
++            ffmpeg=kwargs.get("ffmpeg"),
++        )
++
++    def fake_normalize_loudness_second_pass(**kwargs):
++        exported = Path(kwargs["exported_path"]).resolve(strict=False)
++        observed_normalization_paths.append(exported)
++        return SimpleNamespace(
++            success=True,
++            status="normalized",
++            output_path=str(exported),
++            return_code=0,
++            stderr_summary="",
++            errors=[],
++            ffmpeg=kwargs.get("ffmpeg"),
++        )
++
++    monkeypatch.setattr("ppb.cli.measure_loudness_first_pass", fake_measure_loudness_first_pass)
++    monkeypatch.setattr("ppb.cli.normalize_loudness_second_pass", fake_normalize_loudness_second_pass)
++
++    main(
++        [
++            "--input",
++            str(job),
++            "--out",
++            str(output_dir),
++            "--no-create-subfolder",
++            "--skip-loudness-verification",
++        ]
++    )
++
++    out = capsys.readouterr().out
++    assert "[loudness] Starting:" in out
++    assert "verification=skipped" in out
++    assert "[loudness] 1/1 measuring:" in out
++    assert "[loudness] 1/1 normalizing:" in out
++    assert "[loudness] 1/1 verifying:" not in out
++
++    assert destination.is_file()
++    assert sha256(source) == source_hash_before
++    assert observed_measurement_paths == [destination.resolve(strict=False)]
++    assert observed_normalization_paths == [destination.resolve(strict=False)]
++
++    report = read_report(output_dir)
++    track = report["tracks"][0]
++    assert track["loudness_status"] == LOUDNESS_STATUS_MEASURED
++    assert track["loudness_normalization_status"] == LOUDNESS_STATUS_NORMALIZED
++    assert track["post_loudness_status"] == LOUDNESS_STATUS_SKIPPED
++    assert "--skip-loudness-verification" in track["post_loudness_skip_reason"]
++    assert report["loudness"]["skip_loudness_verification"] is True
++    assert report["loudness_verification_totals"]["verified"] == 0
++    assert report["loudness_verification_totals"][LOUDNESS_STATUS_SKIPPED] == 1
++
++    report_text = (output_dir / "export_report.txt").read_text(encoding="utf-8")
++    assert "Post-normalization verification skipped: 1" in report_text
++
++
+ def test_resolved_integrated_loudness_warning_is_preserved_as_input_warning_only(tmp_path, monkeypatch):
+     source = tmp_path / "sources" / "tone.wav"
+     write_sine_wav(source)

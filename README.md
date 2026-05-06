@@ -6,7 +6,9 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: B12.3 keeps the B11.3 export workflow and extends safe resume preflight with actual conservative file reuse. The tool reads a neutral playlist input, validates it, computes what would be copied or converted, reports path conflicts and missing sources, creates or prepares the physical output folder plus `export_session.json`, copies tracks planned as `copy`, converts tracks planned as `convert`, measures and normalizes loudness for newly exported output files when requested, writes normalized tags to newly exported final copies when `settings.write_tags=true`, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, writes human-readable `export_report.txt`, writes `export.log`, and prints a final CLI summary. Copied exported files are made writable after copy so read-only source attributes do not block later PPB processing. Loudness replacement and tag writing also make the final exported copy writable before writing and use a small permission-only retry for Windows/cloud-sync `PermissionError` / `WinError 5` races. Tag writing happens only after copy/conversion/loudness, only for newly exported files inside the final output folder, and never reads or modifies source audio files. `--resume` inspects `export_session.json` and `export_report.json` inside an explicit existing final output folder, validates prior metadata, compares the current operation plan with prior per-track results and existing output files, and reuses only tracks that remain safe at execution time. Reused tracks are reported as `resumed`, are included in `playlist.m3u8`, and are not copied, converted, normalized, or tagged again. General retry, fail-fast behavior, and bundled ffmpeg are not implemented.
+Current stage: B12.4.2 keeps the B12.4.1 runtime-only effective output format override and adds an isolated low-level FFmpeg helper for the future fused MP3 loudness export path. The helper `normalize_loudness_and_encode_mp3_from_source()` can read a source audio file as FFmpeg input, apply loudnorm second-pass measured parameters, encode directly to a temporary MP3 inside `final_output_dir`, verify that the temporary MP3 exists and is non-empty, and then atomically move/replace it as the final `.mp3`. It does not modify source files, does not write next to source files, and is not wired into the CLI/export pipeline yet.
+
+The existing B12.3/B12.4.1 behavior remains intact: the tool reads a neutral playlist input, validates it, applies `--output-format mp3` as a runtime-only in-memory override when requested, computes copy/convert operations, creates or prepares the physical output folder, copies or converts tracks, measures and normalizes loudness for newly exported output files when requested, writes normalized tags to newly exported final copies when enabled, generates a UTF-8 `playlist.m3u8`, writes `export_report.json`, `export_report.txt`, `export.log`, prints a final CLI summary, and supports conservative `--resume` reuse for safe candidates. Retry, fail-fast behavior, loudness cache, and fused MP3 loudness export from the CLI are not implemented yet.
 
 ## Supported Input Types
 
@@ -92,6 +94,8 @@ python -m ppb.cli --input tracks.csv --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input playlist.m3u8 --out D:\PlaylistOut --dry-run
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --dry-run --report
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut
+python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --output-format mp3
+python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --output-format mp3 --audio-bitrate 320k --skip-loudness-verification --id3-version v23
 python -m ppb.cli --input playlist_job_mp3.json --out D:\PlaylistOut --ffmpeg C:\Tools\ffmpeg\bin\ffmpeg.exe
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --m3u-name road-trip.m3u8
 python -m ppb.cli --input DOC\examples\playlist_job.v1.canonical.json --out .\out
@@ -99,12 +103,15 @@ python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --no-create-sub
 python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut\Road_Mix_20260503_120000 --no-create-subfolder --resume
 ```
 
+`--output-format mp3` currently only overrides the effective target format for the current run. B12.4.2 adds the low-level fused MP3 loudness helper, but the optimized fused MP3 loudness export path is not wired into CLI/export execution yet.
+
 Arguments:
 
 | Argument | Required | Description |
 |---|---:|---|
 | `--input` | Yes | Path to JSON, TXT, CSV, M3U, or M3U8 input. |
 | `--input-type` | No | `auto`, `json`, `txt`, `csv`, `m3u`, or `m3u8`. Default: `auto`. |
+| `--output-format` | No | Runtime-only output format override for the current CLI run. Currently supports `mp3`. It derives an in-memory effective job/settings value before planning and execution, affects dry-run and real export consistently, and does not modify the input JSON or `physical_playlist_job.v1`. |
 | `--out` | Yes | Base output folder for future exported playlist files. |
 | `--overwrite` | No | Allow writing `export_session.json` into an existing non-empty final output folder. Default: false. |
 | `--create-subfolder` / `--no-create-subfolder` | No | Create a timestamped playlist subfolder under `--out`. Default: true. |
@@ -119,6 +126,26 @@ Arguments:
 | `--skip-loudness` | No | Skip loudness measurement and normalization during real export. |
 | `--skip-tags` | No | Skip tag writing during real export, even when `settings.write_tags=true`. |
 | `--id3-version` | No | `v23` or `v24` for MP3 tag writing. Default: `v24`. |
+
+## Runtime Output Format Override
+
+B12.4.1 introduced a narrow runtime-only output format override:
+
+```bash
+python -m ppb.cli --input playlist_job.json --out D:\PlaylistOut --output-format mp3
+```
+
+The override currently supports only `mp3`. It is applied only to the current CLI run and does not rewrite the input JSON file. Internally the CLI derives an effective in-memory `PlaylistJob` before dry-run planning and real execution.
+
+When `--output-format mp3` is used:
+
+- dry-run planning uses `.mp3` as the effective target suffix;
+- planning may switch tracks from `copy` to `convert` when the source format differs from the effective MP3 target;
+- real execution receives the same effective target format that was used during planning;
+- downstream loudness, tag writing, M3U8, report, and log stages operate on the effective run result;
+- the canonical `physical_playlist_job.v1` contract is unchanged.
+
+When the flag is omitted, the CLI keeps the previous behavior and uses `settings.output_format` from the input job.
 
 Input type detection defaults to file extension. `.json` is treated as canonical `physical_playlist_job.v1` JSON, `.txt` as a plain path list, `.csv` as tabular input, and `.m3u` / `.m3u8` as playlist files.
 
@@ -358,6 +385,7 @@ Dry-run mode does not create `export_report.txt` or `export.log`. `--report` rem
 - capture ffmpeg return code, stdout, stderr, and a stderr summary;
 - measure loudness through a read-only ffmpeg loudnorm first pass for exported output files;
 - normalize loudness through ffmpeg loudnorm second pass for exported output files only, using a temporary output inside the final output folder;
+- provide an isolated low-level helper `normalize_loudness_and_encode_mp3_from_source()` for future fused MP3 loudness export; this helper reads the original source file as input, applies loudnorm second-pass measured parameters, encodes directly to a temporary `.tmp.mp3` inside `final_output_dir`, and moves/replaces it as the final `.mp3` only after successful non-empty output;
 - verify loudness after successful normalization by measuring the normalized exported output file.
 
 Supported helper-level target formats are `mp3`, `flac`, `wav`, `m4a`, and `aac`. MP3 uses `libmp3lame` with default VBR quality `2`; `m4a` and `aac` use ffmpeg's native `aac` encoder when available in the local ffmpeg build. Sample rate is preserved by default because the helper does not pass `-ar`.
@@ -367,6 +395,8 @@ In the main CLI workflow, planned `convert` tracks use the normalized job target
 The CLI calls `measure_loudness_first_pass()` after successful copy/conversion. It runs ffmpeg with the `loudnorm` filter in first-pass mode and writes output to ffmpeg's `null` muxer, so it does not create, modify, replace, delete, rename, normalize, or tag audio files. It returns structured fields including `success`, `return_code`, `input_i`, `input_tp`, `input_lra`, `input_thresh`, `target_offset`, raw loudnorm JSON payload, and stderr diagnostics. The CLI stores these values in reports and logs.
 
 When first-pass measurement succeeds, the CLI calls `normalize_loudness_second_pass()` for the same exported file. The helper refuses files outside the final output folder, creates a unique temporary destination inside that folder, uses the measured `loudnorm` values for the second pass, writes no metadata tags (`-map_metadata -1`), makes the exported destination writable, and replaces the exported copy only after ffmpeg succeeds. Replacement uses a small permission-only retry for Windows/cloud-sync `PermissionError` / `WinError 5` cases. If ffmpeg fails, the temporary output is incomplete, or replacement finally fails, the original exported copy remains in place and the attempt is reported as `failed` or `ffmpeg_missing`. The CLI then verifies successful normalization by measuring the final exported file again.
+
+B12.4.2 also adds `normalize_loudness_and_encode_mp3_from_source()` as an isolated low-level helper for the future optimized MP3 export path. Unlike the current CLI loudness flow, this helper is designed for source-to-final-MP3 processing: the source file is used only as FFmpeg input, the temporary MP3 is created only inside `final_output_dir`, the final destination must resolve inside `final_output_dir`, and the final destination must have a `.mp3` suffix. The helper does not write tags, does not generate M3U8 entries, and is not called by `ppb.cli` yet.
 
 Example generated files after a real run:
 
@@ -426,6 +456,9 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 ## Safety Rules
 
 - Source audio files are never modified.
+- `--output-format mp3` is a runtime-only override and never rewrites the input JSON file.
+- The override derives an in-memory effective job/settings value for the current run only.
+- The override does not change `physical_playlist_job.v1`, canonical examples, source files, or persistent project configuration.
 - Dry-run checks whether source files exist before any real output stage.
 - The copy/conversion/tag/M3U8/report/log stage reads source files and writes only exported audio files plus generated report/log/playlist files in the selected output folder.
 - In `--resume` mode, reused audio files are only read/checked and are never copied, converted, normalized, tagged, deleted, renamed, or overwritten.
@@ -433,6 +466,12 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 - Loudness measurement receives only successfully exported destination files inside the final output folder as ffmpeg inputs and writes output to the `null` muxer.
 - Loudness normalization receives only successfully measured exported destination files inside the final output folder as ffmpeg inputs.
 - Loudness normalization writes a temporary output only inside the final output folder, then replaces the exported copy only after ffmpeg succeeds.
+- B12.4.2 adds a low-level source-to-MP3 loudnorm helper, but the main CLI workflow still does not measure or normalize source audio files directly.
+- `normalize_loudness_and_encode_mp3_from_source()` may read a source audio file only as FFmpeg input.
+- The helper writes temporary and final MP3 files only inside `final_output_dir`.
+- The helper requires the final destination to resolve inside `final_output_dir` and to use a `.mp3` suffix.
+- The helper removes its temporary `.tmp.mp3` output on FFmpeg failure or missing/empty temp output when possible.
+- Existing final MP3 files are not overwritten by the helper unless `overwrite=True`.
 - Loudness measurement and normalization never read source audio files directly in the CLI workflow.
 - Loudness normalization failures keep the existing unnormalized exported copy intact and remove only the temporary output created by that attempt.
 - Tag writing runs only after copy/conversion/loudness, only for newly copied or converted final copies inside the selected final output folder, and only when `settings.write_tags=true` and `--skip-tags` is not passed.
@@ -473,20 +512,26 @@ pip install -r requirements.txt
 pytest tests/
 ```
 
-Focused B12.3 checks:
+Focused B12.4.2 checks:
 
 ```bash
 python -m ppb.cli --help
-python -m py_compile ppb\cli.py ppb\copier.py ppb\report.py ppb\resume.py ppb\m3u.py
-python -m pip show mutagen
-python -m pytest tests\test_copier.py -q --basetemp C:\Temp\project_pytest\b12_3_copier -p no:cacheprovider
-python -m pytest tests\test_loudness_processing.py tests\test_ffmpeg_conversion.py tests\test_tag_writing.py tests\test_cli_u1.py -q --basetemp C:\Temp\project_pytest\b12_3_regression -p no:cacheprovider
+python -m py_compile ppb\cli.py ppb\planner.py ppb\ffmpeg_tools.py
+python -m pytest tests\test_loudness_processing.py -q --basetemp C:\Temp\project_pytest\b12_4_2_loudness -p no:cacheprovider
 ```
+
+In one local Windows/YandexDisk run, the focused pytest command reached pytest session cleanup and then hit `PermissionError: [WinError 5]` in the external temp folder. The new B12.4.1 scenarios were additionally checked with a small Python harness: help output, dry-run override, omitted override behavior, unchanged input JSON, and effective format propagation into the execution path. Treat pytest cleanup permission errors as environment/temp-folder issues unless the same focused test fails before cleanup in a safe external `--basetemp`.
+
+For B12.4.2, one requested pytest run hit a Windows temp ACL/setup failure while trying to access/remove `C:\Temp\project_pytest\b12_4_2_loudness`. A diagnostic rerun with a temporary pytest directory-permission workaround passed: `18 passed in 2.38s`. Treat such temp-folder cleanup/setup failures as environment issues unless the focused test fails before cleanup in a safe external `--basetemp`.
 
 If `C:\Temp` is not writable in the local environment, use another explicit pytest temp directory outside the repository when possible. The focused conversion, loudness, and tag tests generate synthetic WAV fixtures with Python standard library `wave`; they do not use real user music files. Tests that require real ffmpeg conversion, M4A creation, or loudness normalization skip cleanly when ffmpeg is not available, while ffmpeg-missing coverage still runs with an invalid explicit `--ffmpeg` path.
 
 ## Current Limitations
 
+- `--output-format` currently supports only `mp3`.
+- `--output-format mp3` is only an effective runtime override; it does not yet enable the optimized fused MP3 loudness export path from CLI.
+- B12.4.2 provides the low-level source-to-final-MP3 loudnorm helper, but this helper is not wired into `ppb.cli`, `ppb.copier`, reports, logs, tags, or M3U8 generation yet.
+- Reports/session files are not yet explicitly extended with a dedicated effective-output-format field unless that value is already visible through existing run data.
 - TXT, CSV, M3U, and M3U8 inputs carry less metadata than canonical JSON.
 - ffmpeg must be installed on `PATH` or passed with `--ffmpeg` for planned `convert` tracks to succeed.
 - If ffmpeg is missing for conversion, planned `convert` tracks are marked `ffmpeg_missing`; copy-only tracks can still complete.
@@ -503,4 +548,11 @@ If `C:\Temp` is not writable in the local environment, use another explicit pyte
 
 ## Next Stage
 
-Next stage is not implemented yet. A logical next step after B12.3 is adding focused tests around invalidated safe candidates and mixed resume/new export runs. Retry behavior and `--fail-fast` remain not implemented.
+Next stage is not implemented yet. A logical next step after B12.4.2 is B12.4.3: wire the low-level fused MP3 loudness helper into a narrow execution path behind the planned eligibility conditions:
+
+- effective output format is `mp3`;
+- `settings.normalize_loudness=true`;
+- `--skip-loudness` is not passed;
+- the run is not `--dry-run`.
+
+The next stage should preserve the existing copy/convert/loudness pipeline for all other modes, keep successful fused exports compatible with existing `converted` handling where possible, and avoid report/schema redesign unless strictly required.

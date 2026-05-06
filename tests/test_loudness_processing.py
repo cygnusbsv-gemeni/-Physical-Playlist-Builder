@@ -19,6 +19,7 @@ from ppb.cli import main
 from ppb.contract import SUPPORTED_FORMAT
 from ppb.ffmpeg_tools import (
     FfmpegResolutionResult,
+    normalize_loudness_and_encode_mp3_from_source,
     normalize_loudness_second_pass,
     resolve_ffmpeg,
 )
@@ -673,6 +674,164 @@ def write_fake_ffmpeg_that_creates_partial_and_fails(tmp_path: Path) -> Path:
     launcher.write_text(f"#!{sys.executable}\n{script_code}", encoding="utf-8")
     launcher.chmod(0o755)
     return launcher
+
+
+def test_fused_mp3_helper_rejects_destination_outside_final_output_dir(tmp_path):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    source_hash_before = sha256(source)
+    output_dir = tmp_path / "export"
+    outside_destination = tmp_path / "outside" / "tone.mp3"
+
+    result = normalize_loudness_and_encode_mp3_from_source(
+        source_path=source,
+        final_mp3_path=outside_destination,
+        final_output_dir=output_dir,
+        input_i=-20.0,
+        input_tp=-2.0,
+        input_lra=3.0,
+        input_thresh=-30.0,
+        target_offset=0.5,
+    )
+
+    assert not result.success
+    assert result.status == "failed"
+    assert any("escapes final output folder" in error for error in result.errors)
+    assert not outside_destination.exists()
+    assert sha256(source) == source_hash_before
+
+
+def test_fused_mp3_helper_requires_final_destination_mp3_suffix(tmp_path):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    output_dir = tmp_path / "export"
+
+    result = normalize_loudness_and_encode_mp3_from_source(
+        source_path=source,
+        final_mp3_path=output_dir / "tone.wav",
+        final_output_dir=output_dir,
+        input_i=-20.0,
+        input_tp=-2.0,
+        input_lra=3.0,
+        input_thresh=-30.0,
+        target_offset=0.5,
+    )
+
+    assert not result.success
+    assert result.status == "failed"
+    assert any("must use .mp3 suffix" in error for error in result.errors)
+    assert not (output_dir / "tone.wav").exists()
+
+
+def test_fused_mp3_helper_success_uses_temp_inside_output_and_preserves_source(tmp_path):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    source_hash_before = sha256(source)
+    output_dir = tmp_path / "export"
+    final_mp3 = output_dir / "tone.mp3"
+    fake_ffmpeg = write_fake_ffmpeg_that_creates_output_and_succeeds(tmp_path)
+    resolution = FfmpegResolutionResult(
+        ok=True,
+        executable=str(fake_ffmpeg),
+        source="test",
+        explicit=True,
+    )
+
+    result = normalize_loudness_and_encode_mp3_from_source(
+        source_path=source,
+        final_mp3_path=final_mp3,
+        final_output_dir=output_dir,
+        input_i=-20.0,
+        input_tp=-2.0,
+        input_lra=3.0,
+        input_thresh=-30.0,
+        target_offset=0.5,
+        ffmpeg=resolution,
+    )
+
+    temporary = Path(result.temporary_path or "")
+    assert result.success
+    assert result.status == "normalized"
+    assert result.target_format == "mp3"
+    assert result.output_path == str(final_mp3.resolve(strict=False))
+    assert final_mp3.read_bytes() == b"normalized bytes"
+    assert sha256(source) == source_hash_before
+    assert not temporary.exists()
+    assert temporary.parent == output_dir.resolve(strict=False)
+    assert temporary.name.startswith(".")
+    assert temporary.name.endswith(".tmp.mp3")
+    assert temporary.parent != source.parent.resolve(strict=False)
+    assert result.command[-1] == str(temporary)
+    assert "-map_metadata" in result.command
+    assert "-1" in result.command
+    assert "-c:a" in result.command
+    assert "libmp3lame" in result.command
+    assert "-q:a" in result.command
+    assert not loudnorm_temp_files(output_dir)
+    assert not list(source.parent.glob("*.tmp.mp3"))
+
+
+def test_fused_mp3_helper_failure_removes_temp_and_does_not_report_success(tmp_path):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    source_hash_before = sha256(source)
+    output_dir = tmp_path / "export"
+    final_mp3 = output_dir / "tone.mp3"
+    fake_ffmpeg = write_fake_ffmpeg_that_creates_partial_and_fails(tmp_path)
+    resolution = FfmpegResolutionResult(
+        ok=True,
+        executable=str(fake_ffmpeg),
+        source="test",
+        explicit=True,
+    )
+
+    result = normalize_loudness_and_encode_mp3_from_source(
+        source_path=source,
+        final_mp3_path=final_mp3,
+        final_output_dir=output_dir,
+        input_i=-20.0,
+        input_tp=-2.0,
+        input_lra=3.0,
+        input_thresh=-30.0,
+        target_offset=0.5,
+        ffmpeg=resolution,
+    )
+
+    assert not result.success
+    assert result.status == "failed"
+    assert result.return_code == 1
+    assert result.stderr_summary
+    assert not final_mp3.exists()
+    assert result.temporary_path is not None
+    assert not Path(result.temporary_path).exists()
+    assert not loudnorm_temp_files(output_dir)
+    assert sha256(source) == source_hash_before
+
+
+def test_fused_mp3_helper_does_not_overwrite_existing_final_without_overwrite(tmp_path):
+    source = tmp_path / "sources" / "tone.wav"
+    write_sine_wav(source)
+    output_dir = tmp_path / "export"
+    output_dir.mkdir()
+    final_mp3 = output_dir / "tone.mp3"
+    final_mp3.write_bytes(b"existing final bytes")
+
+    result = normalize_loudness_and_encode_mp3_from_source(
+        source_path=source,
+        final_mp3_path=final_mp3,
+        final_output_dir=output_dir,
+        input_i=-20.0,
+        input_tp=-2.0,
+        input_lra=3.0,
+        input_thresh=-30.0,
+        target_offset=0.5,
+        ffmpeg=FfmpegResolutionResult(ok=True, executable="unused", source="test", explicit=True),
+    )
+
+    assert not result.success
+    assert result.status == "destination_exists"
+    assert final_mp3.read_bytes() == b"existing final bytes"
+    assert result.temporary_path is None
 
 
 def test_loudness_normalization_replaces_read_only_exported_copy(tmp_path):

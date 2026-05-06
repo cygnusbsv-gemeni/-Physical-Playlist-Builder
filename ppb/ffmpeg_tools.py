@@ -895,6 +895,340 @@ def normalize_loudness_second_pass(
     )
 
 
+def normalize_loudness_and_encode_mp3_from_source(
+    *,
+    source_path: Path | str,
+    final_mp3_path: Path | str,
+    final_output_dir: Path | str,
+    input_i: float | int | str | None,
+    input_tp: float | int | str | None,
+    input_lra: float | int | str | None,
+    input_thresh: float | int | str | None,
+    target_offset: float | int | str | None,
+    ffmpeg: FfmpegResolutionResult | Path | str | None = None,
+    target_lufs: float | int | str | None = DEFAULT_TARGET_LUFS,
+    true_peak_db: float | int | str | None = DEFAULT_TRUE_PEAK_DB,
+    loudness_range_lufs: float | int | str | None = DEFAULT_LOUDNESS_RANGE_LUFS,
+    mp3_quality: int = DEFAULT_MP3_QUALITY,
+    audio_bitrate: int | str | None = None,
+    overwrite: bool = False,
+    timeout_sec: float | None = None,
+) -> FfmpegLoudnessNormalizationResult:
+    """Normalize source audio and encode directly to a final MP3 output.
+
+    The source file is only passed to ffmpeg as a read-only input. The helper
+    writes a unique temporary MP3 inside ``final_output_dir`` and atomically
+    replaces ``final_mp3_path`` only after ffmpeg succeeds and produces a
+    non-empty temporary file.
+    """
+
+    output = Path(final_output_dir).expanduser().resolve(strict=False)
+    source = Path(source_path).expanduser()
+    source_resolved = source.resolve(strict=False)
+    final_mp3 = _resolve_destination_path(final_mp3_path, output)
+    target_format = "mp3"
+
+    target = _normalize_loudnorm_target_value(
+        target_lufs,
+        default=DEFAULT_TARGET_LUFS,
+        name="target_lufs",
+    )
+    true_peak = _normalize_loudnorm_target_value(
+        true_peak_db,
+        default=DEFAULT_TRUE_PEAK_DB,
+        name="true_peak_db",
+    )
+    lra_target = _normalize_loudnorm_target_value(
+        loudness_range_lufs,
+        default=DEFAULT_LOUDNESS_RANGE_LUFS,
+        name="loudness_range_lufs",
+    )
+    measured_values = {
+        "measured_input_i": _normalize_required_loudnorm_value(
+            input_i,
+            name="input_i",
+        ),
+        "measured_input_tp": _normalize_required_loudnorm_value(
+            input_tp,
+            name="input_tp",
+        ),
+        "measured_input_lra": _normalize_required_loudnorm_value(
+            input_lra,
+            name="input_lra",
+        ),
+        "measured_input_thresh": _normalize_required_loudnorm_value(
+            input_thresh,
+            name="input_thresh",
+        ),
+        "measured_target_offset": _normalize_required_loudnorm_value(
+            target_offset,
+            name="target_offset",
+        ),
+    }
+
+    errors = [
+        result.error
+        for result in (target, true_peak, lra_target, *measured_values.values())
+        if result.error is not None
+    ]
+    errors.extend(
+        _validate_fused_mp3_loudness_encode_request(
+            source=source,
+            source_resolved=source_resolved,
+            destination=final_mp3,
+            output=output,
+            mp3_quality=mp3_quality,
+            audio_bitrate=audio_bitrate,
+            overwrite=overwrite,
+        )
+    )
+    if errors:
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=_status_for_fused_mp3_validation_errors(errors),
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            errors=errors,
+        )
+
+    resolution = _ensure_ffmpeg_resolution(ffmpeg)
+    if not resolution.ok:
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FFMPEG_UNAVAILABLE,
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            ffmpeg=resolution,
+            errors=[resolution.error or "ffmpeg executable could not be resolved."],
+        )
+
+    bitrate = _normalize_audio_bitrate(audio_bitrate)
+    if bitrate.error:
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            ffmpeg=resolution,
+            errors=[bitrate.error],
+        )
+
+    temp_result = _unique_loudness_temp_path(exported=final_mp3, output=output)
+    if temp_result.error is not None or temp_result.path is None:
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            ffmpeg=resolution,
+            errors=[temp_result.error or "Could not create a safe temporary MP3 output path."],
+        )
+
+    temporary = temp_result.path
+    command = _build_loudness_normalization_command(
+        executable=resolution.executable or "ffmpeg",
+        source=source,
+        destination=temporary,
+        target_format=target_format,
+        target_lufs=target.value,
+        true_peak_db=true_peak.value,
+        loudness_range_lufs=lra_target.value,
+        measured_input_i=measured_values["measured_input_i"].value,
+        measured_input_tp=measured_values["measured_input_tp"].value,
+        measured_input_lra=measured_values["measured_input_lra"].value,
+        measured_input_thresh=measured_values["measured_input_thresh"].value,
+        measured_target_offset=measured_values["measured_target_offset"].value,
+        mp3_quality=mp3_quality,
+        audio_bitrate=bitrate.value,
+    )
+
+    try:
+        temporary.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            errors=[f"Could not create temporary MP3 folder inside final output folder: {exc}"],
+        )
+
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_sec,
+        )
+    except OSError as exc:
+        warnings = _remove_partial_destination(
+            temporary,
+            destination_existed_before=False,
+        )
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            warnings=warnings,
+            errors=[f"ffmpeg fused MP3 loudness encode failed: {exc}"],
+        )
+    except subprocess.TimeoutExpired as exc:
+        stderr = exc.stderr or ""
+        warnings = _remove_partial_destination(
+            temporary,
+            destination_existed_before=False,
+        )
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            stdout=exc.stdout or "",
+            stderr=stderr,
+            stderr_summary=_summarize_stderr(stderr),
+            warnings=warnings,
+            errors=[f"ffmpeg fused MP3 loudness encode timed out after {timeout_sec:g} seconds."],
+        )
+
+    stdout = completed.stdout or ""
+    stderr = completed.stderr or ""
+    stderr_summary = _summarize_stderr(stderr)
+    if completed.returncode != 0:
+        warnings = _remove_partial_destination(
+            temporary,
+            destination_existed_before=False,
+        )
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            warnings=warnings,
+            errors=[f"ffmpeg fused MP3 loudness encode failed with exit code {completed.returncode}."],
+        )
+
+    if not temporary.is_file() or temporary.stat().st_size <= 0:
+        warnings = _remove_partial_destination(
+            temporary,
+            destination_existed_before=False,
+        )
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            warnings=warnings,
+            errors=["ffmpeg reported success but temporary MP3 file was missing or empty."],
+        )
+
+    replace_warnings, replace_error = _replace_exported_file_with_retry(
+        temporary=temporary,
+        exported=final_mp3,
+    )
+    if replace_error is not None:
+        cleanup_warnings = _remove_partial_destination(
+            temporary,
+            destination_existed_before=False,
+        )
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            warnings=replace_warnings + cleanup_warnings,
+            errors=[replace_error],
+        )
+
+    if not final_mp3.is_file() or final_mp3.stat().st_size <= 0:
+        return FfmpegLoudnessNormalizationResult(
+            success=False,
+            status=STATUS_FAILED,
+            source_path=str(source_resolved),
+            output_path=str(final_mp3),
+            output_folder=str(output),
+            target_format=target_format,
+            temporary_path=str(temporary),
+            ffmpeg=resolution,
+            command=command,
+            return_code=completed.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            stderr_summary=stderr_summary,
+            errors=["Fused MP3 replacement completed but final MP3 is missing or empty."],
+        )
+
+    return FfmpegLoudnessNormalizationResult(
+        success=True,
+        status=STATUS_LOUDNESS_NORMALIZED,
+        source_path=str(source_resolved),
+        output_path=str(final_mp3),
+        output_folder=str(output),
+        target_format=target_format,
+        temporary_path=str(temporary),
+        ffmpeg=resolution,
+        command=command,
+        return_code=completed.returncode,
+        stdout=stdout,
+        stderr=stderr,
+        stderr_summary=stderr_summary,
+        warnings=replace_warnings,
+    )
+
+
 @dataclass(frozen=True)
 class _CandidateResult:
     executable: str
@@ -1097,6 +1431,47 @@ def _validate_loudness_normalization_request(
             f"{target_format or '(empty)'}. Supported formats: "
             f"{', '.join(sorted(SUPPORTED_TARGET_FORMATS))}."
         )
+    if not 0 <= mp3_quality <= 9:
+        errors.append("mp3_quality must be an integer from 0 to 9.")
+    bitrate = _normalize_audio_bitrate(audio_bitrate)
+    if bitrate.error:
+        errors.append(bitrate.error)
+
+    return errors
+
+
+def _validate_fused_mp3_loudness_encode_request(
+    *,
+    source: Path,
+    source_resolved: Path,
+    destination: Path,
+    output: Path,
+    mp3_quality: int,
+    audio_bitrate: int | str | None,
+    overwrite: bool,
+) -> list[str]:
+    errors: list[str] = []
+
+    if not source.is_file():
+        errors.append(f"Source file does not exist on disk: {source}")
+    if source.exists() and not source.is_file():
+        errors.append(f"Source path is not a file: {source}")
+
+    if not _is_relative_to(destination, output) or destination == output:
+        errors.append(f"Final MP3 destination escapes final output folder: {destination}")
+    if destination.suffix.lower() != ".mp3":
+        errors.append(f"Final MP3 destination must use .mp3 suffix: {destination}")
+    if destination.parent.exists() and not destination.parent.is_dir():
+        errors.append(f"Final MP3 destination parent exists but is not a folder: {destination.parent}")
+    if destination.exists() and not destination.is_file():
+        errors.append(f"Final MP3 destination exists but is not a file: {destination}")
+    if destination.exists() and not overwrite:
+        errors.append(f"Destination file already exists: {destination}")
+    if destination.resolve(strict=False) == source_resolved:
+        errors.append("Final MP3 destination must not be the same file as the source path.")
+    if destination.parent.resolve(strict=False) == source_resolved.parent.resolve(strict=False):
+        errors.append("Final MP3 destination must not be written next to the source file.")
+
     if not 0 <= mp3_quality <= 9:
         errors.append("mp3_quality must be an integer from 0 to 9.")
     bitrate = _normalize_audio_bitrate(audio_bitrate)
@@ -1379,6 +1754,14 @@ def _extract_loudnorm_values(payload: dict[str, object]) -> _LoudnormValueResult
 def _status_for_validation_errors(errors: list[str], target_format: str) -> str:
     if target_format not in SUPPORTED_TARGET_FORMATS:
         return STATUS_UNSUPPORTED_FORMAT
+    if any("Source file does not exist" in error or "Source path is not a file" in error for error in errors):
+        return STATUS_SOURCE_MISSING
+    if any("Destination file already exists" in error for error in errors):
+        return STATUS_DESTINATION_EXISTS
+    return STATUS_FAILED
+
+
+def _status_for_fused_mp3_validation_errors(errors: list[str]) -> str:
     if any("Source file does not exist" in error or "Source path is not a file" in error for error in errors):
         return STATUS_SOURCE_MISSING
     if any("Destination file already exists" in error for error in errors):

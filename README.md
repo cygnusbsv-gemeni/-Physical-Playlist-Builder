@@ -6,9 +6,11 @@ Physical Playlist Builder is an independent Python CLI utility for answering one
 How do I physically prepare this playlist on disk?
 ```
 
-Current stage: B12.4.3 keeps the B12.4.1 runtime-only effective output format override and wires the B12.4.2 low-level fused MP3 loudness helper into a narrow real-export execution path. When the effective output format is `mp3`, `settings.normalize_loudness=true`, `--skip-loudness` is not passed, and the run is not `--dry-run`, eligible tracks use the fused path: loudness is measured directly from `source_path` as read-only FFmpeg input, then loudnorm second pass and MP3 encoding write a temporary `.tmp.mp3` inside `final_output_dir`, and the final `.mp3` is created only after successful output.
+Current stage: B12.4.4 keeps the B12.4.3 minimal fused MP3 execution path and adds minimal fused MP3 report/log presentation without changing export execution logic. Eligible fused MP3 exports still run only when the effective output format is `mp3`, `settings.normalize_loudness=true`, `--skip-loudness` is not passed, and the run is not `--dry-run`.
 
-Successful fused exports are reported as existing status `converted` with additional per-track fields such as `audio_action="fused_loudnorm_encode"`, `measurement_source="source"`, `normalization_output="final_mp3"`, and `output_format_effective="mp3"`. This keeps existing tag writing and M3U8 inclusion compatible with the current `converted` flow. The regular copy/convert/loudness pipeline remains intact for non-fused modes, including `output_format=source`, `normalize_loudness=false`, `--skip-loudness`, `--dry-run`, and conservative `--resume` behavior. Retry, fail-fast behavior, loudness cache, parallel processing, album normalization, and report redesign are not implemented yet.
+B12.4.4 adds a `Fused MP3 Loudness Export` section to `export_report.txt`, keeps fused per-track fields in `export_report.json`, adds compatible fused totals/summary keys (`fused_loudnorm_encoded`, `fused_loudnorm_failed`), and writes two concise fused summary lines to `export.log`: `[fused-mp3] enabled` and `[fused-mp3] encoded=N failed=M`. This is a presentation/report/log layer only. Fused processing logic, tag writing, M3U8 generation, dry-run behavior, copier safety boundaries, and source-file safety remain unchanged.
+
+Successful fused exports still keep the existing main status `converted` with additional fields such as `audio_action="fused_loudnorm_encode"`, `measurement_source="source"`, `normalization_output="final_mp3"`, and `output_format_effective="mp3"`. The regular loudness stage still recognizes fused results and does not measure or normalize them a second time. Fused post-normalization verification remains skipped in B12.4.4 and is reported as skipped.
 
 ## Supported Input Types
 
@@ -257,7 +259,7 @@ When loudness processing runs, the CLI first calls ffmpeg `loudnorm` in first-pa
 
 After a successful second-pass normalization, the CLI runs one more loudness measurement on the normalized exported file. Verification results are reported as `post_loudness_status` with post-normalization loudness fields. Verification failure does not delete, replace, or downgrade the already exported file status; it is reported as a loudness verification problem.
 
-For B12.4.3 fused MP3 results, the regular exported-copy loudness stage recognizes fused tracks and does not measure or normalize them a second time. Post-normalization verification for fused results is skipped in this stage and recorded with a clear skipped reason. This is a current limitation, not a failure of the fused export itself.
+For B12.4.4 fused MP3 results, the regular exported-copy loudness stage recognizes fused tracks and does not measure or normalize them a second time. Post-normalization verification for fused results is skipped in this stage and recorded with a clear skipped reason. This is a current limitation, not a failure of the fused export itself.
 
 If `settings.normalize_loudness=false` or `--skip-loudness` is passed, loudness measurement, normalization, and post-normalization verification are skipped and the skip is recorded in `export_report.json`, `export_report.txt`, and `export.log`. If ffmpeg is missing during loudness processing, the export does not crash; already copied or converted files remain in place, loudness status is recorded as `ffmpeg_missing` or `skipped`, and `playlist.m3u8` generation still uses the successfully exported files.
 
@@ -375,6 +377,40 @@ When `--resume` is passed, `export_report.txt` also includes a `Resume Preflight
 
 The stage writes `export.log` using only Python standard library logging. The log records the main real-run milestones: validation completed, output folder created/prepared, resume requested and prior session/report found or missing when `--resume` is passed, resume comparison started, resume comparison totals, resume execution started/completed, per-track reused/not-reused resume reasons, important unsafe comparison reasons when present, export stage completed, conversions or copy operations, loudness measurement started, loudness normalization started, per-track loudness measured/normalized/verified/skipped/failed entries, loudness measurement completed, loudness normalization completed, loudness verification completed, tag writing started, per-track tag written/skipped/failed entries, tag writing completed, M3U8 generated or skipped, reports written, plus warnings and errors when available. Successful ffmpeg stderr/progress summaries are logged as non-error information; `ERROR` is reserved for failed ffmpeg calls and failed export/loudness/tag operations.
 
+### Fused MP3 Loudness Export Reporting
+
+Starting with B12.4.4, fused MP3 exports have minimal dedicated report/log presentation.
+
+`export_report.json` keeps existing per-track fused fields and may include additional compatible totals/summary keys:
+
+- `fused_loudnorm_encoded`
+- `fused_loudnorm_failed`
+
+`export_report.txt` includes a section:
+
+```text
+Fused MP3 Loudness Export
+----------------------------------------
+Status: enabled/disabled
+Measurement source: original source files, read-only
+Normalization output: final MP3 files
+Temporary files: inside final output folder
+Encoded: N
+Failed: M
+Verification: skipped for fused results in B12.4.3/B12.4.4
+```
+
+When no fused results exist, the section reports `Status: disabled`.
+
+`export.log` may include concise fused summary lines:
+
+```text
+[fused-mp3] enabled
+[fused-mp3] encoded=N failed=M
+```
+
+B12.4.4 does not redesign the report schema and does not change fused execution eligibility.
+
 At the end of a real run, the CLI prints a final summary containing the final output folder, copied/converted/resumed/skipped/failed/missing/conflict/ffmpeg-missing counts, M3U8 status/path, `export_report.json`, `export_report.txt`, and `export.log`.
 
 Dry-run mode does not create `export_report.txt` or `export.log`. `--report` remains a dry-run JSON report feature.
@@ -472,13 +508,17 @@ Fatal job-level errors always fail with exit code 2. Examples include malformed 
 - Loudness measurement receives only successfully exported destination files inside the final output folder as ffmpeg inputs and writes output to the `null` muxer.
 - Loudness normalization receives only successfully measured exported destination files inside the final output folder as ffmpeg inputs.
 - Loudness normalization writes a temporary output only inside the final output folder, then replaces the exported copy only after ffmpeg succeeds.
-- In B12.4.3, the main CLI workflow may measure source audio directly only in the narrow fused MP3 loudness mode: effective output format is `mp3`, `settings.normalize_loudness=true`, `--skip-loudness` is not passed, and the run is not `--dry-run`.
+- In B12.4.4, the main CLI workflow may measure source audio directly only in the narrow fused MP3 loudness mode: effective output format is `mp3`, `settings.normalize_loudness=true`, `--skip-loudness` is not passed, and the run is not `--dry-run`.
 - In that fused mode, source audio files are still read-only FFmpeg inputs and are never modified, tagged, renamed, moved, deleted, or normalized in place.
 - Fused MP3 temporary and final outputs are written only inside `final_output_dir`.
 - Fused successful tracks are reported as `converted` with `audio_action="fused_loudnorm_encode"`, allowing existing tag writing and M3U8 generation to keep using the normal converted-track path.
 - The regular loudness stage skips second measurement/normalization for fused results to avoid duplicate processing.
-- Post-normalization verification for fused results is skipped in B12.4.3 and recorded as skipped.
-- Loudness measurement and normalization never read source audio files directly in the CLI workflow.
+- Post-normalization verification for fused results is skipped in B12.4.4 and recorded as skipped.
+- B12.4.4 changes only fused report/log presentation; it does not change fused processing logic.
+- Fused results are still not re-measured or re-normalized by the regular loudness stage.
+- Fused post-normalization verification is still skipped and reported as skipped.
+- `export_report.json` may include extra fused totals/summary keys, but existing fields and statuses are preserved.
+- `export_report.txt` and `export.log` may include fused summary information; these files are generated runtime reports and should not be edited manually.
 - Loudness normalization failures keep the existing unnormalized exported copy intact and remove only the temporary output created by that attempt.
 - Tag writing runs only after copy/conversion/loudness, only for newly copied or converted final copies inside the selected final output folder, and only when `settings.write_tags=true` and `--skip-tags` is not passed.
 - Tag writing uses only normalized metadata from the job and never reads tags from source files.
@@ -518,19 +558,21 @@ pip install -r requirements.txt
 pytest tests/
 ```
 
-Focused B12.4.3 checks:
+Focused B12.4.4 checks:
 
 ```bash
-python -m ppb.cli --help
-python -m py_compile ppb\cli.py ppb\copier.py ppb\ffmpeg_tools.py
-python -m pytest tests\test_ffmpeg_conversion.py tests\test_loudness_processing.py -q --basetemp C:\Temp\project_pytest\b12_4_3_fused -p no:cacheprovider
+python -m py_compile ppb\report.py ppb\cli.py
+python -m pytest tests\test_loudness_processing.py -q --basetemp C:\Temp\project_pytest\b12_4_4_reports -p no:cacheprovider
 ```
 
-In one local Windows/YandexDisk run, the focused pytest command reached pytest session cleanup and then hit `PermissionError: [WinError 5]` in the external temp folder. The new B12.4.1 scenarios were additionally checked with a small Python harness: help output, dry-run override, omitted override behavior, unchanged input JSON, and effective format propagation into the execution path. Treat pytest cleanup permission errors as environment/temp-folder issues unless the same focused test fails before cleanup in a safe external `--basetemp`.
+In the B12.4.4 local Windows/YandexDisk environment, the requested pytest command hit temp/ACL setup or cleanup errors (`PermissionError` / `FileNotFoundError`) around external temp handling. A manual Python harness was used to verify the key scenarios in `C:\temp\project_pytest\manual_b12_4_4`:
 
-For B12.4.2, one requested pytest run hit a Windows temp ACL/setup failure while trying to access/remove `C:\Temp\project_pytest\b12_4_2_loudness`. A diagnostic rerun with a temporary pytest directory-permission workaround passed: `18 passed in 2.38s`. Treat such temp-folder cleanup/setup failures as environment issues unless the focused test fails before cleanup in a safe external `--basetemp`.
+- fused end-to-end JSON/text/log presentation;
+- fused text `Encoded` / `Failed` counts;
+- non-fused disabled fused section;
+- non-fused `--skip-loudness` compatibility.
 
-For B12.4.3, the requested pytest command hit a Windows temp permission issue on `C:\Temp\project_pytest\b12_4_3_fused`. A diagnostic pytest run with a Windows temp-permission workaround passed: `28 passed in 3.26s`. Treat this as an environment/temp-folder issue unless the same focused tests fail before cleanup with a safe external `--basetemp`.
+Treat these pytest temp/ACL errors as environment issues unless the same focused tests fail before cleanup with a safe external `--basetemp`.
 
 If `C:\Temp` is not writable in the local environment, use another explicit pytest temp directory outside the repository when possible. The focused conversion, loudness, and tag tests generate synthetic WAV fixtures with Python standard library `wave`; they do not use real user music files. Tests that require real ffmpeg conversion, M4A creation, or loudness normalization skip cleanly when ffmpeg is not available, while ffmpeg-missing coverage still runs with an invalid explicit `--ffmpeg` path.
 
@@ -538,8 +580,10 @@ If `C:\Temp` is not writable in the local environment, use another explicit pyte
 
 - `--output-format` currently supports only `mp3`.
 - The fused MP3 loudness path is implemented only for the narrow eligible mode: effective output format `mp3`, `settings.normalize_loudness=true`, no `--skip-loudness`, and real non-dry-run export.
-- Fused post-normalization verification is skipped in B12.4.3 and recorded with a clear skipped reason.
-- Reports/logs include existing per-track data and the new fused fields where produced, but there is no dedicated fused summary/report redesign yet.
+- Fused post-normalization verification is still not implemented; fused verification is reported as skipped.
+- B12.4.4 adds minimal fused report/log presentation but does not redesign the report schema.
+- The focused pytest command may still be unstable in Windows/cloud-synced environments because of temp/ACL cleanup issues; use a fresh external `--basetemp` and separate environment errors from project logic failures.
+- Loudness cache, resumable loudness measurement/normalization, parallel processing, album normalization, and ReplayGain/R128 tag-only mode are not implemented.
 - TXT, CSV, M3U, and M3U8 inputs carry less metadata than canonical JSON.
 - ffmpeg must be installed on `PATH` or passed with `--ffmpeg` for planned `convert` tracks to succeed.
 - If ffmpeg is missing for conversion, planned `convert` tracks are marked `ffmpeg_missing`; copy-only tracks can still complete.
@@ -556,6 +600,6 @@ If `C:\Temp` is not writable in the local environment, use another explicit pyte
 
 ## Next Stage
 
-Next stage is not implemented yet. A logical next step after B12.4.3 is B12.4.4: improve fused MP3 report and log presentation without redesigning the report schema.
+Next stage is not implemented yet. A logical next step after B12.4.4 is not a new audio feature, but validation stabilization: define and verify a reliable Windows pytest temp strategy for focused B12.4 regression runs.
 
-The next stage should add a clear `Fused MP3 Loudness Export` section to `export_report.txt`, make `export.log` fused-stage messages easy to distinguish, and add minimal compatible totals such as `fused_loudnorm_encoded` / `fused_loudnorm_failed` only if they do not break existing report consumers. It should not implement loudness cache, parallel processing, album normalization, ReplayGain/R128 tag-only normalization, or broad report redesign.
+The next stage should not change fused execution logic, report schema, loudness processing, tags, M3U8, or `physical_playlist_job.v1`. It should focus on making the B12.4 focused pytest subset reproducible with a safe external temp folder and documenting the exact validation command.

@@ -388,6 +388,7 @@ def write_export_report_text(
     resume = _resume_metadata_to_dict(resume_metadata)
     resume_execution_totals = _resume_execution_totals(copy_result, resume)
     summary = _summary_with_resume_totals(copy_result, resume_execution_totals)
+    fused_totals = _fused_mp3_totals(copy_result)
     lines: list[str] = [
         "Physical Playlist Builder Export Report",
         "=" * 40,
@@ -421,6 +422,16 @@ def write_export_report_text(
         f"Post-normalization verified: {verification_totals.get('verified', 0)}",
         f"Post-normalization verification skipped: {verification_totals.get(LOUDNESS_STATUS_SKIPPED, 0)}",
         f"Post-normalization verification failed: {verification_totals.get('verification_failed', 0)}",
+        "",
+        "Fused MP3 Loudness Export",
+        "-" * 40,
+        f"Status: {'enabled' if _fused_mp3_result_count(fused_totals) > 0 else 'disabled'}",
+        "Measurement source: original source files, read-only",
+        "Normalization output: final MP3 files",
+        "Temporary files: inside final output folder",
+        f"Encoded: {fused_totals['fused_loudnorm_encoded']}",
+        f"Failed: {fused_totals['fused_loudnorm_failed']}",
+        "Verification: skipped for fused results in B12.4.3/B12.4.4",
         "",
         "Tag Writing",
         "-" * 40,
@@ -665,6 +676,7 @@ def _summary_with_resume_totals(
     resume_execution_totals: dict[str, int],
 ) -> dict[str, int]:
     summary = dict(copy_result.summary)
+    summary.update(_fused_mp3_totals(copy_result))
     summary[STATUS_RESUMED] = resume_execution_totals.get(STATUS_RESUMED, 0)
     summary["reused"] = resume_execution_totals.get("reused", 0)
     summary["resume_reuse_skipped_processing"] = resume_execution_totals.get(
@@ -680,6 +692,29 @@ def _summary_with_resume_totals(
         0,
     )
     return summary
+
+
+def _fused_mp3_totals(copy_result: CopyStageResult) -> dict[str, int]:
+    encoded = 0
+    failed = 0
+    for result in copy_result.results:
+        if getattr(result, "audio_action", None) != "fused_loudnorm_encode":
+            continue
+        if result.status == STATUS_CONVERTED:
+            encoded += 1
+        else:
+            failed += 1
+    return {
+        "fused_loudnorm_encoded": encoded,
+        "fused_loudnorm_failed": failed,
+    }
+
+
+def _fused_mp3_result_count(fused_totals: dict[str, int]) -> int:
+    return fused_totals.get("fused_loudnorm_encoded", 0) + fused_totals.get(
+        "fused_loudnorm_failed",
+        0,
+    )
 
 
 def _int_from_mapping(mapping: Any, key: str) -> int:

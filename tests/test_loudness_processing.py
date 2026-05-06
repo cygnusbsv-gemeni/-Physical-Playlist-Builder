@@ -16,6 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ppb.cli import _fused_mp3_loudness_enabled, main
+from ppb.copier import CopyStageResult, CopyTrackResult
 from ppb.contract import SUPPORTED_FORMAT
 from ppb.ffmpeg_tools import (
     FfmpegResolutionResult,
@@ -29,6 +30,7 @@ from ppb.report import (
     LOUDNESS_STATUS_MEASURED,
     LOUDNESS_STATUS_NORMALIZED,
     LOUDNESS_STATUS_SKIPPED,
+    write_export_report_text,
 )
 
 
@@ -235,8 +237,21 @@ def test_cli_fused_mp3_measures_source_encodes_final_and_skips_second_loudness_p
     assert track["post_loudness_status"] == LOUDNESS_STATUS_SKIPPED
     assert "fused source-to-final MP3" in track["post_loudness_skip_reason"]
     assert report["totals"]["converted"] == 1
+    assert report["totals"]["fused_loudnorm_encoded"] == 1
+    assert report["totals"]["fused_loudnorm_failed"] == 0
     assert report["loudness_totals"][LOUDNESS_STATUS_MEASURED] == 1
     assert report["loudness_totals"][LOUDNESS_STATUS_NORMALIZED] == 1
+
+    report_text = (output_dir / "export_report.txt").read_text(encoding="utf-8")
+    assert "Fused MP3 Loudness Export" in report_text
+    assert "Status: enabled" in report_text
+    assert "Encoded: 1" in report_text
+    assert "Failed: 0" in report_text
+    assert "Verification: skipped for fused results in B12.4.3/B12.4.4" in report_text
+
+    log_text = (output_dir / "export.log").read_text(encoding="utf-8")
+    assert "[fused-mp3] enabled" in log_text
+    assert "[fused-mp3] encoded=1 failed=0" in log_text
 
     playlist_text = (output_dir / "playlist.m3u8").read_text(encoding="utf-8")
     assert "tone.mp3" in playlist_text
@@ -402,6 +417,138 @@ def test_cli_fused_mp3_measurement_failure_does_not_encode_or_create_final_mp3(
     assert track["loudness_status"] == LOUDNESS_STATUS_FAILED
     assert track["loudness_normalization_status"] == LOUDNESS_STATUS_FAILED
     assert "forced measurement failure" in track["loudness_error"]
+
+
+def test_report_text_fused_section_counts_encoded_and_failed_results(tmp_path):
+    output_dir = tmp_path / "export"
+    output_dir.mkdir()
+    report_path = output_dir / "export_report.txt"
+    copy_result = CopyStageResult(
+        output_dir=str(output_dir),
+        overwrite=False,
+        results=[
+            CopyTrackResult(
+                position=1,
+                source_path=str(tmp_path / "sources" / "one.wav"),
+                destination_path=str(output_dir / "one.mp3"),
+                expected_output_filename="one.mp3",
+                planned_action="convert",
+                status="converted",
+                target_format="mp3",
+                audio_action="fused_loudnorm_encode",
+                measurement_source="source",
+                normalization_output="final_mp3",
+                output_format_effective="mp3",
+                post_loudness_status="skipped",
+                post_loudness_skip_reason=(
+                    "post-normalization verification was skipped for fused source-to-final MP3 export."
+                ),
+            ),
+            CopyTrackResult(
+                position=2,
+                source_path=str(tmp_path / "sources" / "two.wav"),
+                destination_path=str(output_dir / "two.mp3"),
+                expected_output_filename="two.mp3",
+                planned_action="convert",
+                status="failed",
+                target_format="mp3",
+                audio_action="fused_loudnorm_encode",
+                measurement_source="source",
+                normalization_output="final_mp3",
+                output_format_effective="mp3",
+                post_loudness_status="skipped",
+                post_loudness_skip_reason=(
+                    "post-normalization verification was skipped because fused normalization did not succeed."
+                ),
+            ),
+        ],
+    )
+    loudness_results = [
+        {
+            "audio_action": "fused_loudnorm_encode",
+            "measurement_source": "source",
+            "normalization_output": "final_mp3",
+            "output_format_effective": "mp3",
+            "loudness_status": LOUDNESS_STATUS_MEASURED,
+            "loudness_normalization_status": LOUDNESS_STATUS_NORMALIZED,
+            "post_loudness_status": LOUDNESS_STATUS_SKIPPED,
+            "post_loudness_skip_reason": (
+                "post-normalization verification was skipped for fused source-to-final MP3 export."
+            ),
+        },
+        {
+            "audio_action": "fused_loudnorm_encode",
+            "measurement_source": "source",
+            "normalization_output": "final_mp3",
+            "output_format_effective": "mp3",
+            "loudness_status": LOUDNESS_STATUS_MEASURED,
+            "loudness_normalization_status": LOUDNESS_STATUS_FAILED,
+            "loudness_normalization_error": "forced fused encode failure",
+            "post_loudness_status": LOUDNESS_STATUS_SKIPPED,
+            "post_loudness_skip_reason": (
+                "post-normalization verification was skipped because fused normalization did not succeed."
+            ),
+        },
+    ]
+
+    write_export_report_text(
+        copy_result,
+        report_path,
+        loudness_results=loudness_results,
+        final_output_dir=output_dir,
+        playlist_name="Fused Counts",
+        report_json_path=output_dir / "export_report.json",
+        log_path=output_dir / "export.log",
+    )
+
+    report_text = report_path.read_text(encoding="utf-8")
+    assert "Fused MP3 Loudness Export" in report_text
+    assert "Status: enabled" in report_text
+    assert "Encoded: 1" in report_text
+    assert "Failed: 1" in report_text
+    assert "Verification: skipped for fused results in B12.4.3/B12.4.4" in report_text
+
+
+def test_report_text_shows_fused_section_disabled_for_non_fused_results(tmp_path):
+    output_dir = tmp_path / "export"
+    output_dir.mkdir()
+    report_path = output_dir / "export_report.txt"
+    copy_result = CopyStageResult(
+        output_dir=str(output_dir),
+        overwrite=False,
+        results=[
+            CopyTrackResult(
+                position=1,
+                source_path=str(tmp_path / "sources" / "tone.wav"),
+                destination_path=str(output_dir / "tone.wav"),
+                expected_output_filename="tone.wav",
+                planned_action="copy",
+                status="copied",
+            )
+        ],
+    )
+
+    write_export_report_text(
+        copy_result,
+        report_path,
+        loudness_results=[
+            {
+                "loudness_status": LOUDNESS_STATUS_SKIPPED,
+                "loudness_normalization_status": LOUDNESS_STATUS_SKIPPED,
+                "post_loudness_status": LOUDNESS_STATUS_SKIPPED,
+            }
+        ],
+        final_output_dir=output_dir,
+        playlist_name="Non Fused",
+        report_json_path=output_dir / "export_report.json",
+        log_path=output_dir / "export.log",
+    )
+
+    report_text = report_path.read_text(encoding="utf-8")
+    assert "Fused MP3 Loudness Export" in report_text
+    assert "Status: disabled" in report_text
+    assert "Encoded: 0" in report_text
+    assert "Failed: 0" in report_text
 
 
 def test_cli_normalize_loudness_success_reports_logs_m3u_and_preserves_source(tmp_path):

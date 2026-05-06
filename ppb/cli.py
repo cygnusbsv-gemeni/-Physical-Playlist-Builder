@@ -594,6 +594,19 @@ def log_copy_details(logger, copy_result) -> None:
             )
 
 
+def _fused_mp3_log_counts(copy_result) -> tuple[int, int]:
+    encoded = 0
+    failed = 0
+    for result in copy_result.results:
+        if getattr(result, "audio_action", None) != "fused_loudnorm_encode":
+            continue
+        if result.status == STATUS_CONVERTED:
+            encoded += 1
+        else:
+            failed += 1
+    return encoded, failed
+
+
 def log_m3u_details(logger, m3u_result) -> None:
     for warning in m3u_result.warnings:
         logger.warning("m3u warning: %s", warning)
@@ -1957,6 +1970,8 @@ def main(argv: list[str] | None = None) -> None:
         logger.info("validation completed")
         log_validation_details(logger, result)
         logger.info("output folder created: %s", output_result.final_output_dir)
+        if fused_loudness_enabled:
+            logger.info("[fused-mp3] enabled")
         if resume_state is not None:
             log_resume_preflight(logger, resume_state)
             log_resume_comparison(logger, resume_state)
@@ -1985,6 +2000,9 @@ def main(argv: list[str] | None = None) -> None:
             progress_callback=print_copy_progress,
         )
         logger.info("export stage completed: %s", copy_result.summary)
+        if fused_loudness_enabled:
+            fused_encoded, fused_failed = _fused_mp3_log_counts(copy_result)
+            logger.info("[fused-mp3] encoded=%s failed=%s", fused_encoded, fused_failed)
         log_copy_details(logger, copy_result)
         if resume_state is not None:
             log_resume_execution_completed(logger, copy_result, resume_state)
